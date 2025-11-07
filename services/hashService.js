@@ -10,4 +10,4 @@ const comparePassword = (password, hashedPassword) => {
 }
 
 
-export { hashedPassword, comparePassword }
+export { hashPassword, comparePassword }

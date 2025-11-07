@@ -5,10 +5,10 @@ import { generateToken } from "../services/jwtService.js";
 
 
 const register = async (req, res) => {
-    const { name, email, password, user_type } = req.body;
+    const { name, email, password, userType } = req.body;
 
     try {
-        existingUser = await userModel.findOne({ email });
+        const existingUser = await userModel.findOne({ email });
 
         if (existingUser) {
             res.status(400).json({ success: false, message: "User already exists" })
@@ -29,13 +29,14 @@ const register = async (req, res) => {
         }
 
         const hashedPassword = await hashPassword(password);
-        const newUser = new userModel({ name, email, password: hashedPassword });
+        const newUser = new userModel({ name, email, password: hashedPassword, userType });
         await newUser.save();
 
         res.status(201).json({ success: true, message: "User registered successfully" });
 
     } catch (error) {
-        res.status(500).json({ success: false, message: "Error in registering user" })
+        console.error(error);
+        res.status(500).json({ success: false, message: "Error" })
     }
 
 }
@@ -52,13 +53,13 @@ const login = async (req, res) => {
             });
         }
 
-        user = await userModel.findOne({ email });
+        const user = await userModel.findOne({ email });
 
         if (!user) {
             res.status($400).json({ success: false, message: "Invalid email or password" });
         }
         //compare password
-        isMatch = await comparePassword(password, user.password);
+        const isMatch = await comparePassword(password, user.password);
 
         if (!isMatch) {
             res.status(400).json({ success: false, messagge: "Invalid email or password" });
@@ -67,9 +68,18 @@ const login = async (req, res) => {
         res.status(201).json({ success: true, message: "Login successful", token })
 
     } catch (error) {
+        console.error(error);
         res.status(500).json({ success: false, message: "Error in login" })
     }
 }
 
+const profile = async (req, res) => {
+    res.json({
+        success: true,
+        message: "Welcome to your profile",
+        user: req.user
+    })
+}
 
-export { register, login };
+
+export { register, login, profile };
