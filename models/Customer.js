@@ -14,8 +14,8 @@ const addressSchema = new mongoose.Schema({
 const customerSchema = new mongoose.Schema(
   {
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    default_pickup_address: { type: String, required: true },
-    delivery_address: { type: String, required: true },
+    pickUpAddress: { type: String, required: true },
+    address: { type: String, required: true },
     total_orders: { type: Number, default: 0 },
     average_rating: { type: Number, default: 0 },
     last_order_at: { type: Date },

@@ -11,53 +11,59 @@ import { v4 as uuidv4 } from 'uuid';
 
 
 const register = async (req, res) => {
-    const { name, email, phone, password, role } = req.body;
-
     try {
-        const existingUser = await User.findOne({ email });
+        const { name, email, phone, password, role } = req.body;
 
+        const existingUser = await User.findOne({ email });
         if (existingUser) {
-            res.status(400).json({ success: false, message: "Account already exists" })
+            return res.status(400).json({ success: false, message: "Account already exists" });
         }
 
         if (!validator.isEmail(email)) {
-            return res.json({
-                success: false,
-                message: 'Please enter a valid email'
-            });
+            return res.json({ success: false, message: 'Please enter a valid email' });
         }
 
         if (password.length < 8) {
-            return res.json({
-                success: "false",
-                message: "Please enter a strong password."
-            })
+            return res.json({ success: false, message: 'Please enter a strong password.' });
         }
 
         const hashedPassword = await hashPassword(password);
         const newUser = new User({ name, email, phone, password: hashedPassword, role });
         await newUser.save();
 
-        // Create role-specific profile
+        // Handle role-specific profile
         if (role === "courier") {
-            const { vehicle_type, plate_number, valid_id, proof_of_address, payout_method, bank_name, bank_account } = req.body;
+            const {
+                deliveryMethod,
+                model,
+                color,
+                plateNumber,
+                payoutMethod,
+                bankName,
+                accountNumber
+            } = req.body;
+
+            const validIdFile = req.files?.validId ? req.files.validId[0].path : "";
+            const proofOfAddressFile = req.files?.proofOfAddress ? req.files.proofOfAddress[0].path : "";
 
             await Courier.create({
                 user_id: newUser._id,
-                vehicle_type,
-                plate_number,
-                valid_id,
-                proof_of_address,
-                payout_method,
-                bank_name,
-                bank_account
+                deliveryMethod,
+                model,
+                color,
+                plateNumber,
+                validId: validIdFile,
+                proofOfAddress: proofOfAddressFile,
+                payoutMethod,
+                bankName,
+                accountNumber
             });
         } else if (role === "customer") {
-            const { default_pickup_address, delivery_address } = req.body;
+            const { pickUpAddress, address } = req.body;
             await Customer.create({
                 user_id: newUser._id,
-                default_pickup_address,
-                delivery_address
+                pickUpAddress,
+                address
             });
         }
 
@@ -65,9 +71,10 @@ const register = async (req, res) => {
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Error" })
+        res.status(500).json({ success: false, message: "Error" });
     }
-}
+};
+
 
 // extract otp stuffs into a service
 
@@ -166,26 +173,34 @@ export const resendOtp = async (req, res) => {
 };
 
 const login = async (req, res) => {
-    const { email, password } = req.body;
-
     try {
-        if (!validator.isEmail(email)) {
-            return res.json({
+        const { emailOrPhone, password } = req.body;
+
+        if (!emailOrPhone || !password) {
+            return res.status(400).json({
                 success: false,
-                message: 'Please enter a valid email'
+                message: "Please provide your email or phone and password",
             });
         }
 
-        const user = await User.findOne({ email });
+        // Determine if the input is an email or a phone number
+        let user;
+        if (validator.isEmail(emailOrPhone)) {
+            user = await User.findOne({ email: emailOrPhone });
+        } else {
+            // Normalize phone number if needed (optional)
+            const phone = emailOrPhone.replace(/\s+/g, "");
+            user = await User.findOne({ phone });
+        }
 
         if (!user) {
-            res.status($400).json({ success: false, message: "Invalid email or password" });
+            res.status(400).json({ success: false, message: "Invalid credentials" });
         }
         //compare password
         const isMatch = await comparePassword(password, user.password);
 
         if (!isMatch) {
-            res.status(400).json({ success: false, messagge: "Invalid email or password" });
+            res.status(400).json({ success: false, messagge: "Invalid credentials" });
         }
         const token = generateToken({ id: user._id, email: user.email })
 
