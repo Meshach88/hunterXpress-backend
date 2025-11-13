@@ -11,14 +11,14 @@ const deliverySchema = new mongoose.Schema(
     //   state: String,
     //   coordinates: { lat: Number, lng: Number },
     // },
-    pick_up_address : String,
+    pickup_address : String,
     // dropoff_address: {
     //   street: String,
     //   city: String,
     //   state: String,
     //   coordinates: { lat: Number, lng: Number },
     // },
-    drop_of_address: String,
+    dropoff_address: String,
     package_details: {
       description: String,
       weight: String,

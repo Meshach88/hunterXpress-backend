@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from "uuid";
  */
 export const createDelivery = async (req, res) => {
     try {
+        console.log(req.body);
         const { pickup_address, dropoff_address, package_details, price, distance_km } = req.body;
 
         const order = await Delivery.create({
@@ -146,3 +147,26 @@ export const confirmDelivery = async (req, res) => {
         res.status(500).json({ message: "Server error" });
     }
 };
+
+/**
+ * @desc Get all deliveries for the logged-in customer
+ * @route GET /api/deliveries/my-orders
+ * @access Private (Customer)
+ */
+export const getMyDeliveries = async (req, res) => {
+  try {
+    const deliveries = await Delivery.find({ customer_id: req.user.id })
+      .sort({ createdAt: -1 }); // newest first
+      console.log("getting deliveries");
+      console.log(deliveries);
+
+    res.status(200).json({
+      count: deliveries.length,
+      deliveries,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch deliveries" });
+  }
+};
+

@@ -2,6 +2,7 @@ import express from 'express';
 import { connectDB } from './config/db.js';
 import userRouter from './routes/userRoute.js';
 import deliveryRouter from "./routes/deliveryRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 import cors from 'cors';
 import 'dotenv/config';
 import { Server } from 'socket.io';
@@ -22,6 +23,7 @@ connectDB();
 // Routes
 app.use('/api/user', userRouter);
 app.use("/api/deliveries", deliveryRouter);
+app.use("/api/payment", paymentRoutes);
 
 app.get('/', (req, res) => {
     res.send('API working');
@@ -31,7 +33,7 @@ app.get('/', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:5173"],
+        origin: [process.env.FRONTEND_URL],
         methods: ["GET", "POST"],
     },
 });
