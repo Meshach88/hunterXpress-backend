@@ -2,6 +2,7 @@ import express from 'express';
 import { register, login, profile, sendOtp, verifyOtp, resendOtp } from '../controllers/authController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import upload from "../middleware/upload.js";
+import { loginLimiter } from '../middleware/loginLimiter.js';
 
 const userRouter = express.Router();
 
@@ -14,7 +15,7 @@ userRouter.post('/register',
 userRouter.post('/sendOtp', sendOtp);
 userRouter.post('/verifyOtp', verifyOtp);
 userRouter.post('/resendOtp', resendOtp);
-userRouter.post('/login', login);
+userRouter.post('/login', loginLimiter, login);
 userRouter.get('/profile', authMiddleware, profile)
 
 export default userRouter;

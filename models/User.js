@@ -13,6 +13,8 @@ const userSchema = new mongoose.Schema(
     },
     profile_picture: { type: String },
     is_verified: { type: Boolean, default: false },
+    loginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date },
     last_login: { type: Date },
   },
   {

@@ -11,27 +11,41 @@ import { v4 as uuidv4 } from 'uuid';
 
 
 const register = async (req, res) => {
+    const session = await User.startSession();
+    session.startTransaction();
+
     try {
         const { name, email, phone, password, role } = req.body;
 
         const existingUser = await User.findOne({ email });
         if (existingUser) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(400).json({ success: false, message: "Account already exists" });
         }
 
         if (!validator.isEmail(email)) {
-            return res.json({ success: false, message: 'Please enter a valid email' });
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({ success: false, message: 'Please enter a valid email' });
         }
 
         if (password.length < 8) {
-            return res.json({ success: false, message: 'Please enter a strong password.' });
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({ success: false, message: 'Please enter a strong password.' });
         }
 
         const hashedPassword = await hashPassword(password);
-        const newUser = new User({ name, email, phone, password: hashedPassword, role });
-        await newUser.save();
 
-        // Handle role-specific profile
+        const newUser = await User.create(
+            [{ name, email, phone, password: hashedPassword, role }],
+            { session }
+        );
+
+        const userId = newUser[0]._id;
+
+        // Role-specific profile creation under SAME transaction
         if (role === "courier") {
             const {
                 deliveryMethod,
@@ -46,8 +60,8 @@ const register = async (req, res) => {
             const validIdFile = req.files?.validId ? req.files.validId[0].path : "";
             const proofOfAddressFile = req.files?.proofOfAddress ? req.files.proofOfAddress[0].path : "";
 
-            await Courier.create({
-                user_id: newUser._id,
+            await Courier.create([{
+                user_id: userId,
                 deliveryMethod,
                 model,
                 color,
@@ -57,21 +71,33 @@ const register = async (req, res) => {
                 payoutMethod,
                 bankName,
                 accountNumber
-            });
+            }], { session });
+
         } else if (role === "customer") {
             const { pickUpAddress, address } = req.body;
-            await Customer.create({
-                user_id: newUser._id,
+
+            await Customer.create([{
+                user_id: userId,
                 pickUpAddress,
                 address
-            });
+            }], { session });
         }
 
-        res.status(201).json({ success: true, message: "Account created successfully" });
+        // Commit the transaction
+        await session.commitTransaction();
+        session.endSession();
+
+        return res.status(201).json({
+            success: true,
+            message: "Account created successfully"
+        });
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Error" });
+        await session.abortTransaction();
+        session.endSession();
+
+        return res.status(500).json({ success: false, message: "Error during registration" });
     }
 };
 
@@ -194,24 +220,24 @@ const login = async (req, res) => {
         }
 
         if (!user) {
-            res.status(400).json({ success: false, message: "Invalid credentials" });
+            return res.json({ success: false, message: "Invalid credentials" });
         }
         //compare password
         const isMatch = await comparePassword(password, user.password);
 
         if (!isMatch) {
-            res.status(400).json({ success: false, messagge: "Invalid credentials" });
+            return res.json({ success: false, message: "Invalid credentials" });
         }
         const token = generateToken({ id: user._id, email: user.email })
 
         let profile = null;
         if (user.role === "courier") profile = await Courier.findOne({ user_id: user._id });
         if (user.role === "customer") profile = await Customer.findOne({ user_id: user._id });
-        res.status(200).json({ success: true, message: "Login successful", token, user, profile });
+        return res.json({ success: true, message: "Login successful", token, user, profile });
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: "Error in login" })
+        return res.status(500).json({ success: false, message: "Error in login" })
     }
 }
 
