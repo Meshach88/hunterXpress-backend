@@ -8,7 +8,8 @@ import { v4 as uuidv4 } from "uuid";
 export const createDelivery = async (req, res) => {
     try {
         console.log(req.body);
-        const { pickup_address, dropoff_address, package_details, price, distance_km } = req.body;
+        const { pickup_address, dropoff_address, price, distance_km } = req.body;
+        const package_details = JSON.parse(req.body.package_details)
 
         const order = await Delivery.create({
             order_reference: `ord${uuidv4().replace(/-/g, "").slice(0, 8)}`,
@@ -154,19 +155,19 @@ export const confirmDelivery = async (req, res) => {
  * @access Private (Customer)
  */
 export const getMyDeliveries = async (req, res) => {
-  try {
-    const deliveries = await Delivery.find({ customer_id: req.user.id })
-      .sort({ createdAt: -1 }); // newest first
-      console.log("getting deliveries");
-      console.log(deliveries);
+    try {
+        const deliveries = await Delivery.find({ customer_id: req.user.id })
+            .sort({ createdAt: -1 }); // newest first
+        console.log("getting deliveries");
+        console.log(deliveries);
 
-    res.status(200).json({
-      count: deliveries.length,
-      deliveries,
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to fetch deliveries" });
-  }
+        res.status(200).json({
+            count: deliveries.length,
+            deliveries,
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to fetch deliveries" });
+    }
 };
 
