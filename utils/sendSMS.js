@@ -1,12 +1,33 @@
-import twilio from "twilio";
-import "dotenv/config";
-
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+import axios from 'axios'
+import FormData from 'form-data'
 
 export const sendSms = async (to, message) => {
-  return client.messages.create({
-    body: message,
-    from: process.env.TWILIO_PHONE_NUMBER,
-    to
-  });
-};
+  try {
+    let data = new FormData();
+    data.append('token', process.env.SMS_TOKEN);
+    data.append('senderID', 'ABC Ltd');
+    data.append('recipients', to);
+    data.append('message', message);
+
+    let config = {
+      method: 'post',
+      maxBodyLength: Infinity,
+      url: 'https://my.kudisms.net/api/corporate',
+      headers: {
+        ...data.getHeaders()
+      },
+      data: data
+    };
+
+    axios.request(config)
+      .then((response) => {
+        console.log(JSON.stringify(response.data));
+      })
+      .catch((error) => {
+        console.log(error);
+      })
+
+  } catch (error) {
+    console.error("SMS Sending Error:", error)
+  }
+}

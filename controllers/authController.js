@@ -15,7 +15,7 @@ const register = async (req, res) => {
     session.startTransaction();
 
     try {
-        const { name, email, phone, password, role } = req.body;
+        const { name, email, phone, otp, password, role } = req.body;
 
         const existingUserWithEmail = await User.findOne({ email });
         const existingUserWithPhone = await User.findOne({ phone });
@@ -44,6 +44,8 @@ const register = async (req, res) => {
             [{ name, email, phone, password: hashedPassword, role }],
             { session }
         );
+
+        console.log(newUser);
 
         const userId = newUser[0]._id;
 
@@ -118,12 +120,10 @@ const sendOtp = async (req, res) => {
 
         await OtpCode.create({ otp_code: otp, otp_reference, channel, phone, expires_at });
 
-        if (channel === "sms") {
-            await sendSms(phone, `Your Verification code is: ${otp}`);
-        } else {
-            await sendEmail(email, "Your Verification Code", `<h1>${otp}</h1>`);
-        }
-        return res.json({ message: "OTP sent successfully", otp, otp_reference });
+        await sendSms(phone, `Your Verification code is: ${otp}`);
+        await sendEmail(email, "Your Verification Code", `<p> <b>${otp}</b> is your verification code</p><p>Do not share this code.</p>`);
+        //Add WhatsApp
+        return res.json({ message: "OTP sent successfully", otp_reference });
     } catch (err) {
         console.log(err);
         res.status(500).json({ message: "Server error" });
@@ -146,8 +146,10 @@ const verifyOtp = async (req, res) => {
             return res.status(400).json({ message: "Invalid or expired OTP" });
         }
 
-        otpRecord.used = true;
-        await otpRecord.save();
+        otpRecord.delete()
+
+        // otpRecord.used = true;
+        // await otpRecord.save();
 
         return res.json({ message: "OTP verified successfully" });
     } catch (err) {
