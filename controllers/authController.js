@@ -19,7 +19,7 @@ const register = async (req, res) => {
 
         const existingUserWithEmail = await User.findOne({ email });
         const existingUserWithPhone = await User.findOne({ phone });
-        
+
         if (existingUserWithEmail || existingUserWithPhone) {
             await session.abortTransaction();
             session.endSession();
@@ -110,7 +110,7 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 
 const sendOtp = async (req, res) => {
     try {
-        const { phone, channel } = req.body;
+        const { phone, email, channel } = req.body;
 
         const otp = generateOTP();
         const expires_at = new Date(Date.now() + 10 * 60 * 1000); // 10 min expiry
@@ -118,11 +118,11 @@ const sendOtp = async (req, res) => {
 
         await OtpCode.create({ otp_code: otp, otp_reference, channel, phone, expires_at });
 
-        // if (channel === "sms") {
-        //     await sendSms(phone, `Your verification code is: ${otp}`);
-        // } else {
-        //     await sendEmail(email, "Your Verification Code", `<h1>${otp}</h1>`);
-        // }
+        if (channel === "sms") {
+            await sendSms(phone, `Your Verification code is: ${otp}`);
+        } else {
+            await sendEmail(email, "Your Verification Code", `<h1>${otp}</h1>`);
+        }
         return res.json({ message: "OTP sent successfully", otp, otp_reference });
     } catch (err) {
         console.log(err);

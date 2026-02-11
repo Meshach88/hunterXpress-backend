@@ -4,7 +4,7 @@ const otpCodeSchema = new mongoose.Schema(
     {
         otp_code: { type: String, required: true },
         otp_reference: { type: String, required: true },
-        channel: { type: String, enum: ["sms", "email"], required: true, default: "sms" },
+        channel: { type: String, enum: ["sms", "email", "all"], required: true, default: "sms" },
         expires_at: { type: Date, required: true },
         used: { type: Boolean, default: false },
         resend_count: { type: Number, default: 0 },
