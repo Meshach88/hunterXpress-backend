@@ -8,100 +8,122 @@ import validator from 'validator';
 import { hashPassword, comparePassword } from "../services/hashService.js";
 import { generateToken } from "../services/jwtService.js";
 import { v4 as uuidv4 } from 'uuid';
+import { uploadToCloudinary } from "../utils/cloudinary.js";
 
 
 const register = async (req, res) => {
-    const session = await User.startSession();
-    session.startTransaction();
 
     try {
         const { name, email, phone, otp, password, role } = req.body;
 
-        const existingUserWithEmail = await User.findOne({ email });
-        const existingUserWithPhone = await User.findOne({ phone });
-
-        if (existingUserWithEmail || existingUserWithPhone) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(400).json({ success: false, message: "Account already exists" });
-        }
-
         if (!validator.isEmail(email)) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(400).json({ success: false, message: 'Please enter a valid email' });
+            return res.status(400).json({ status: false, message: "Invalid email" });
         }
 
         if (password.length < 8) {
-            await session.abortTransaction();
-            session.endSession();
-            return res.status(400).json({ success: false, message: 'Please enter a strong password.' });
+            return res.status(400).json({ status: false, message: "Weak password" });
         }
 
-        const hashedPassword = await hashPassword(password);
-
-        const newUser = await User.create(
-            [{ name, email, phone, password: hashedPassword, role }],
-            { session }
-        );
-
-        console.log(newUser);
-
-        const userId = newUser[0]._id;
-
-        // Role-specific profile creation under SAME transaction
-        if (role === "courier") {
-            const {
-                deliveryMethod,
-                model,
-                color,
-                plateNumber,
-                payoutMethod,
-                bankName,
-                accountNumber
-            } = req.body;
-
-            const validIdFile = req.files?.validId ? req.files.validId[0].path : "";
-            const proofOfAddressFile = req.files?.proofOfAddress ? req.files.proofOfAddress[0].path : "";
-
-            await Courier.create([{
-                user_id: userId,
-                deliveryMethod,
-                model,
-                color,
-                plateNumber,
-                validId: validIdFile,
-                proofOfAddress: proofOfAddressFile,
-                payoutMethod,
-                bankName,
-                accountNumber
-            }], { session });
-
-        } else if (role === "customer") {
-            const { pickUpAddress, address } = req.body;
-
-            await Customer.create([{
-                user_id: userId,
-                pickUpAddress,
-                address
-            }], { session });
-        }
-
-        // Commit the transaction
-        await session.commitTransaction();
-        session.endSession();
-
-        return res.status(201).json({
-            success: true,
-            message: "Account created successfully"
+        const existingUser = await User.findOne({
+            $or: [{ email }, { phone }]
         });
 
-    } catch (error) {
-        console.error(error);
-        await session.abortTransaction();
-        session.endSession();
+        if (existingUser) {
+            return res.status(400).json({ message: "Account already exists" });
+        }
 
-        return res.status(500).json({ success: false, message: "Error during registration" });
+        let validIdUpload, proofUpload;
+
+        if (role === "courier") {
+            const validIdFile = req.files?.validId?.[0];
+            const proofFile = req.files?.proofOfAddress?.[0];
+
+            if (!validIdFile || !proofFile) {
+                return res.status(400).json({
+                    message: "Both Valid Id and Proof of Address required"
+                });
+            }
+
+            [validIdUpload, proofUpload] = await Promise.all([
+                uploadToCloudinary(validIdFile.buffer),
+                uploadToCloudinary(proofFile.buffer)
+            ]);
+        }
+        const session = await User.startSession();
+        session.startTransaction();
+        try {
+            const hashedPassword = await hashPassword(password);
+
+            const newUser = await User.create(
+                [{ name, email, phone, password: hashedPassword, role }],
+                { session }
+            );
+
+            console.log(newUser);
+
+            const userId = newUser[0]._id;
+
+            if (role === "courier") {
+                const {
+                    deliveryMethod,
+                    model,
+                    color,
+                    plateNumber,
+                    payoutMethod,
+                    bankName,
+                    accountNumber
+                } = req.body;
+
+                await Courier.create([{
+                    user_id: userId,
+                    deliveryMethod,
+                    model,
+                    color,
+                    plateNumber,
+                    validId: validIdUpload.secure_url,
+                    proofOfAddress: proofUpload.secure_url,
+                    payoutMethod,
+                    bankName,
+                    accountNumber
+                }], { session });
+
+            } else if (role === "customer") {
+                const { pickUpAddress, address } = req.body;
+
+                await Customer.create([{
+                    user_id: userId,
+                    pickUpAddress,
+                    address
+                }], { session });
+            }
+
+            await session.commitTransaction();
+            session.endSession();
+
+            return res.status(201).json({
+                success: true,
+                message: "Account created successfully"
+            });
+
+        } catch (dbError) {
+            await session.abortTransaction();
+            session.endSession();
+
+            if (validIdUpload) {
+                await cloudinary.uploader.destroy(validIdUpload.public_id);
+            }
+            if (proofUpload) {
+                await cloudinary.uploader.destroy(proofUpload.public_id);
+            }
+
+            throw dbError;
+        }
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Registration failed"
+        });
     }
 };
 
@@ -120,7 +142,7 @@ const sendOtp = async (req, res) => {
 
         await OtpCode.create({ otp_code: otp, otp_reference, channel, phone, expires_at });
 
-        await sendSms(phone, `Your Verification code is: ${otp}`);
+        // await sendSms(phone, `Your Verification code is: ${otp}`);
         await sendEmail(email, "Your Verification Code", `<p> <b>${otp}</b> is your verification code</p><p>Do not share this code.</p>`);
         //Add WhatsApp
         return res.json({ message: "OTP sent successfully", otp_reference });
