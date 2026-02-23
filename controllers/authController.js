@@ -35,6 +35,8 @@ const register = async (req, res) => {
         let validIdUpload, proofUpload;
 
         if (role === "courier") {
+            console.log('Image files', req.files, req.FILES, $_FILES)
+            
             const validIdFile = req.files?.validId?.[0];
             const proofFile = req.files?.proofOfAddress?.[0];
 
