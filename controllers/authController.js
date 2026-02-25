@@ -15,6 +15,7 @@ const register = async (req, res) => {
 
     try {
         const { name, email, phone, otp, password, role } = req.body;
+        console.log(req.body);
 
         if (!validator.isEmail(email)) {
             return res.status(400).json({ status: false, message: "Invalid email" });
@@ -34,22 +35,16 @@ const register = async (req, res) => {
 
         let validIdUpload, proofUpload;
 
-        if (role === "courier") {
-            console.log('Image files', req.files, req.FILES, $_FILES)
-            
+        if (role === "courier") {            
             const validIdFile = req.files?.validId?.[0];
             const proofFile = req.files?.proofOfAddress?.[0];
 
-            if (!validIdFile || !proofFile) {
-                return res.status(400).json({
-                    message: "Both Valid Id and Proof of Address required"
-                });
+            if (validIdFile && proofFile) {
+                [validIdUpload, proofUpload] = await Promise.all([
+                    uploadToCloudinary(validIdFile.buffer),
+                    uploadToCloudinary(proofFile.buffer)
+                ]);
             }
-
-            [validIdUpload, proofUpload] = await Promise.all([
-                uploadToCloudinary(validIdFile.buffer),
-                uploadToCloudinary(proofFile.buffer)
-            ]);
         }
         const session = await User.startSession();
         session.startTransaction();
@@ -71,6 +66,8 @@ const register = async (req, res) => {
                     model,
                     color,
                     plateNumber,
+                    validId,
+                    proofOfAddress,
                     payoutMethod,
                     bankName,
                     accountNumber
@@ -82,8 +79,8 @@ const register = async (req, res) => {
                     model,
                     color,
                     plateNumber,
-                    validId: validIdUpload.secure_url,
-                    proofOfAddress: proofUpload.secure_url,
+                    validId: validIdUpload ? validIdUpload.secure_url : validId,
+                    proofOfAddress: proofUpload ? proofUpload.secure_url : proofOfAddress,
                     payoutMethod,
                     bankName,
                     accountNumber
@@ -122,6 +119,7 @@ const register = async (req, res) => {
         }
 
     } catch (error) {
+        console.error(error)
         return res.status(500).json({
             success: false,
             message: "Registration failed"

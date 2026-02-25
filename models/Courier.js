@@ -14,6 +14,7 @@ const courierSchema = new mongoose.Schema(
         bankName: { type: String, required: true },
         rating: { type: Number, default: 0 },
         total_deliveries: { type: Number, default: 0 },
+        total_earnings: { type: Number, default: 0},
         is_available: { type: Boolean, default: false },
         is_verified: { type: Boolean, default: false },
         last_known_location: {
