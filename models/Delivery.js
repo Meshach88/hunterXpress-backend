@@ -5,6 +5,7 @@ const deliverySchema = new mongoose.Schema(
     order_reference: { type: String, required: true, unique: true },
     customer_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     courier_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    sender: { type: String, required: true },
     // pickup_address: {
     //   street: String,
     //   city: String,
@@ -12,6 +13,7 @@ const deliverySchema = new mongoose.Schema(
     //   coordinates: { lat: Number, lng: Number },
     // },
     pickup_address : String,
+    recipient: { type: String, required: true },
     // dropoff_address: {
     //   street: String,
     //   city: String,
