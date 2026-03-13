@@ -10,7 +10,7 @@ export const initializePayment = async (req, res) => {
         if (!order) return res.status(404).json({ message: "Order not found" });
 
         // Paystack expects amount in kobo
-        const amount = order.price * 100;
+        const amount = parseInt(order.price * 100);
 
         const response = await axios.post(
             "https://api.paystack.co/transaction/initialize",
@@ -57,7 +57,7 @@ export const verifyPayment = async (req, res) => {
         );
 
         const data = verifyRes.data.data;
-        console.log(data);
+        // console.log(data);
         if (data.status === "success") {
             const { orderId } = data.metadata;
 
@@ -76,6 +76,6 @@ export const verifyPayment = async (req, res) => {
         }
     } catch (error) {
         console.error(error.message);
-        return res.json({ success: true, message: "Payment verification failed" });
+        return res.json({ success: false, message: "Payment verification failed" });
     }
 };

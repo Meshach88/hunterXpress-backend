@@ -6,28 +6,32 @@ const deliverySchema = new mongoose.Schema(
     customer_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     courier_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     sender: { type: String, required: true },
-    // pickup_address: {
-    //   street: String,
-    //   city: String,
-    //   state: String,
-    //   coordinates: { lat: Number, lng: Number },
-    // },
-    pickup_address : String,
+    pickup_address: {
+      type: {
+        address: { type: String, required: true },
+        lat: { type: Number, required: true },
+        lng: { type: Number, required: true }
+      },
+      required: true
+    },
     recipient: { type: String, required: true },
-    // dropoff_address: {
-    //   street: String,
-    //   city: String,
-    //   state: String,
-    //   coordinates: { lat: Number, lng: Number },
-    // },
-    dropoff_address: String,
+    dropoff_address: {
+      type: {
+        address: { type: String, required: true },
+        lat: { type: Number, required: true },
+        lng: { type: Number, required: true }
+      },
+      required: true
+    },
     package_details: {
       description: String,
       weight: String,
       value: Number,
     },
-    distance_km: Number,
-    price: Number,
+    photo_upload: String,
+    distance_km: { type: Number, required: true },
+    estimated_time: { type: Number, required: true },
+    price: { type: Number, required: true },
     delivery_status: {
       type: String,
       enum: ["pending", "assigned", "accepted", "picked_up", "in_transit", "delivered", "confirmed", "cancelled"],

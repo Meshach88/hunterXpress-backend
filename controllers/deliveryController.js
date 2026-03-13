@@ -7,9 +7,11 @@ import { v4 as uuidv4 } from "uuid";
  */
 export const createDelivery = async (req, res) => {
     try {
-        console.log(req.body);
-        const { sender, pickup_address, recipient, dropoff_address, price, distance_km } = req.body;
+        console.log('Delivery request', req.body)
+        const { sender, recipient, price, distance_km, estimated_time, photo } = req.body;
         const package_details = JSON.parse(req.body.package_details)
+        const pickup_address = JSON.parse(req.body.pickup_address)
+        const dropoff_address = JSON.parse(req.body.dropoff_address)
 
         const order = await Delivery.create({
             order_reference: `ord${uuidv4().replace(/-/g, "").slice(0, 8)}`,
@@ -19,8 +21,10 @@ export const createDelivery = async (req, res) => {
             recipient,
             dropoff_address,
             package_details,
+            photo_upload: photo,
             price,
             distance_km,
+            estimated_time,
             delivery_status: "pending",
         });
 
