@@ -9,6 +9,7 @@ import { Server } from 'socket.io';
 import http from 'http';
 import Courier from './models/Courier.js';
 import { verifyToken } from './services/jwtService.js';
+import courierRouter from './routes/courierRoutes.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -22,6 +23,7 @@ connectDB();
 
 // Routes
 app.use('/api/user', userRouter);
+app.use('/api/courier', courierRouter);
 app.use("/api/deliveries", deliveryRouter);
 app.use("/api/payment", paymentRoutes);
 
