@@ -5,6 +5,11 @@ const deliverySchema = new mongoose.Schema(
     order_reference: { type: String, required: true, unique: true },
     customer_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     courier_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    assigned_courier_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Courier",
+      default: null
+    },
     sender: { type: String, required: true },
     pickup_address: {
       type: {
@@ -36,6 +41,11 @@ const deliverySchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "assigned", "accepted", "picked_up", "in_transit", "delivered", "confirmed", "cancelled"],
       default: "pending",
+    },
+    delivery_type: {
+      type: String,
+      required: true,
+      enum: ["send", "receive"],
     },
     proof_of_delivery: {
       signature_url: String,

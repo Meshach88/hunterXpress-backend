@@ -1,5 +1,8 @@
 import axios from "axios";
 import Delivery from "../models/Delivery.js";
+import { io } from "../index.js";
+import { courierSockets } from "../sockets/courierSocket.js";
+import Courier from "../models/Courier.js";
 
 // ✅ Initialize payment (customer pays for delivery)
 export const initializePayment = async (req, res) => {
@@ -8,6 +11,9 @@ export const initializePayment = async (req, res) => {
 
         const order = await Delivery.findById(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
+
+        const courier = await Courier.findById(order.courier_id);
+        if (!courier) return res.status(404).json({message: "Courier not found"})
 
         // Paystack expects amount in kobo
         const amount = parseInt(order.price * 100);
@@ -21,6 +27,7 @@ export const initializePayment = async (req, res) => {
                 metadata: {
                     orderId: order._id,
                     customerId: req.user._id,
+                    courierId: courier._id
                 },
             },
             {
@@ -59,11 +66,17 @@ export const verifyPayment = async (req, res) => {
         const data = verifyRes.data.data;
         // console.log(data);
         if (data.status === "success") {
-            const { orderId } = data.metadata;
+            const { orderId, courierId } = data.metadata;
 
-            await Delivery.findByIdAndUpdate(orderId, {
+            const order = await Delivery.findByIdAndUpdate(orderId, {
                 payment_status: "paid",
                 delivery_status: "confirmed",
+            });
+
+            const socketId = courierSockets.get(courierId.toString());
+
+            io.to(socketId).emit("order confirmed", {
+                order
             });
 
             return res.json({ success: true, message: "Payment verified successfully" });

@@ -6,6 +6,7 @@ import {
   completeDelivery,
   confirmDelivery,
   getMyDeliveries,
+  dispatchOrder,
 } from "../controllers/deliveryController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 
@@ -13,6 +14,9 @@ const deliveryRouter = express.Router();
 
 // Customer creates a new delivery order
 deliveryRouter.post("/", authMiddleware, createDelivery);
+
+//Dispatch order/deliveries to couriers
+deliveryRouter.post("/dispatch", authMiddleware, dispatchOrder);
 
 // Courier accepts an order
 deliveryRouter.patch("/:id/accept", authMiddleware, acceptDelivery);

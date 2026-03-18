@@ -1,5 +1,7 @@
 import Delivery from "../models/Delivery.js";
 import { v4 as uuidv4 } from "uuid";
+import { dispatchDelivery } from "../services/dispatchService.js";
+import Courier from "../models/Courier.js";
 
 /**
  * @desc Customer creates a new delivery order
@@ -8,7 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 export const createDelivery = async (req, res) => {
     try {
         console.log('Delivery request', req.body)
-        const { sender, recipient, price, distance_km, estimated_time, photo } = req.body;
+        const { sender, recipient, price, distance_km, estimated_time, photo, delivery_type } = req.body;
         const package_details = JSON.parse(req.body.package_details)
         const pickup_address = JSON.parse(req.body.pickup_address)
         const dropoff_address = JSON.parse(req.body.dropoff_address)
@@ -26,7 +28,9 @@ export const createDelivery = async (req, res) => {
             distance_km,
             estimated_time,
             delivery_status: "pending",
+            delivery_type
         });
+
 
         // Optional: Emit to couriers via Socket.IO here if available
         // io.emit("new_delivery", order);
@@ -41,6 +45,40 @@ export const createDelivery = async (req, res) => {
         res.status(500).json({ message: "Server error" });
     }
 };
+
+export const dispatchOrder = async (req, res) => {
+
+    const { orderId } = req.body;
+
+    try {
+        const order = await Delivery.findById(orderId);
+
+        const accepted = await dispatchDelivery(order);
+
+        if (!accepted) {
+            return res.json({
+                success: false,
+                message: "No courier accepted the order"
+            });
+        }
+
+        order.delivery_status = "accepted";
+        await order.save();
+
+        const courier = Courier.findById(order.courier_id);
+
+        return res.status(200).json({
+            success: true,
+            message: "Courier accepted the offer",
+            data: courier
+        })
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({message: 'Server error'})
+    }
+
+}
 
 /**
  * @desc Courier accepts a delivery order
@@ -164,7 +202,6 @@ export const getMyDeliveries = async (req, res) => {
     try {
         const deliveries = await Delivery.find({ customer_id: req.user.id })
             .sort({ createdAt: -1 }); // newest first
-        console.log("getting deliveries");
         // console.log(deliveries);
 
         res.status(200).json({
