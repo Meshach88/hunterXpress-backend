@@ -56,7 +56,7 @@ const register = async (req, res) => {
                 { session }
             );
 
-            console.log(newUser);
+            // console.log(newUser);
 
             const userId = newUser[0]._id;
 
