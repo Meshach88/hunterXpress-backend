@@ -12,8 +12,8 @@ export const initializePayment = async (req, res) => {
         const order = await Delivery.findById(orderId);
         if (!order) return res.status(404).json({ message: "Order not found" });
 
-        const courier = await Courier.findById(order.courier_id);
-        if (!courier) return res.status(404).json({message: "Courier not found"})
+        // const courier = await Courier.findById(order.courier_id);
+        // if (!courier) return res.status(404).json({message: "Courier not found"})
 
         // Paystack expects amount in kobo
         const amount = parseInt(order.price * 100);
@@ -26,8 +26,8 @@ export const initializePayment = async (req, res) => {
                 callback_url: `${process.env.FRONTEND_URL}/welcome/payment/verify?orderId=${order._id}`,
                 metadata: {
                     orderId: order._id,
-                    customerId: req.user._id,
-                    courierId: courier._id
+                    customerId: req.user.id,
+                    // courierId: courier._id
                 },
             },
             {
@@ -73,19 +73,17 @@ export const verifyPayment = async (req, res) => {
                 delivery_status: "confirmed",
             });
 
-            const socketId = courierSockets.get(courierId.toString());
+            // const socketId = courierSockets.get(courierId.toString());
 
-            io.to(socketId).emit("order confirmed", {
-                order
-            });
+            // if (socketId) {
+            //     io.of("/courier").to(socketId).emit("order confirmed", {
+            //         order
+            //     });
+            // }
 
             return res.json({ success: true, message: "Payment verified successfully" });
-
-            // return res.redirect(`${process.env.FRONTEND_URL}/welcome/payment/success`);
         } else {
-            return res.json({ success: true, message: "Payment verification failed" });
-
-            // return res.redirect(`${process.env.FRONTEND_URL}/welcome/payment/failed`);
+            return res.json({ success: false, message: "Payment verification failed" });
         }
     } catch (error) {
         console.error(error.message);

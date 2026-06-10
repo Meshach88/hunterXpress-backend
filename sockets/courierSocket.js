@@ -1,4 +1,5 @@
 import Courier from "../models/Courier.js";
+import Delivery from "../models/Delivery.js";
 import { dispatchResponses } from "../events/dispatchEvents.js";
 
 const locationUpdateInterval = 5000; // 5 seconds

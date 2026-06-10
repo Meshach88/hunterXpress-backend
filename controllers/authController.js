@@ -6,23 +6,34 @@ import { sendSms } from "../utils/sendSMS.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import validator from 'validator';
 import { hashPassword, comparePassword } from "../services/hashService.js";
-import { generateToken } from "../services/jwtService.js";
+import { generateToken, verifyToken } from "../services/jwtService.js";
 import { v4 as uuidv4 } from 'uuid';
 import { uploadToCloudinary } from "../utils/cloudinary.js";
+import { v2 as cloudinary } from "cloudinary";
 
+const ALLOWED_ROLES = ["customer", "courier"];
 
 const register = async (req, res) => {
 
     try {
-        const { name, email, phone, otp, password, role } = req.body;
-        console.log(req.body);
+        const { name, email, phone, password, role, otp, otp_reference } = req.body;
+
+        console.log(name, email, phone, password, role, otp, otp_reference);
 
         if (!validator.isEmail(email)) {
             return res.status(400).json({ status: false, message: "Invalid email" });
         }
 
-        if (password.length < 8) {
+        if (!password || password.length < 8) {
             return res.status(400).json({ status: false, message: "Weak password" });
+        }
+
+        if (!ALLOWED_ROLES.includes(role)) {
+            return res.status(400).json({ status: false, message: "Invalid role" });
+        }
+
+        if (!otp || !otp_reference) {
+            return res.status(400).json({ status: false, message: "OTP verification is required" });
         }
 
         const existingUser = await User.findOne({
@@ -31,6 +42,19 @@ const register = async (req, res) => {
 
         if (existingUser) {
             return res.status(400).json({ message: "Account already exists" });
+        }
+
+        const otpRecord = await OtpCode.findOne({
+            otp_code: otp,
+            otp_reference,
+            email,
+            phone,
+            used: false,
+            expires_at: { $gte: new Date() }
+        });
+
+        if (!otpRecord) {
+            return res.status(400).json({ status: false, message: "Invalid or expired OTP" });
         }
 
         let validIdUpload, proofUpload;
@@ -56,7 +80,7 @@ const register = async (req, res) => {
                 { session }
             );
 
-            // console.log(newUser);
+            await OtpCode.deleteOne({ _id: otpRecord._id }, { session });
 
             const userId = newUser[0]._id;
 
@@ -132,22 +156,42 @@ const register = async (req, res) => {
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
+// Fire-and-forget: dispatches the OTP via SMS/email in the background so the
+// request doesn't block on a third-party API. Failures are logged, not thrown,
+// since the user can always request a resend.
+const deliverOtpInBackground = ({ channel, phone, email, otp, label = "verification code" }) => {
+    const delivery = channel === "sms"
+        ? sendSms(phone, `Your ${label} is: ${otp}`)
+        : sendEmail(email, "Your Verification Code", `<p> <b>${otp}</b> is your ${label}</p><p>Do not share this code.</p>`);
+
+    delivery.catch((err) => {
+        console.error(`OTP delivery failed (channel=${channel}, target=${channel === "sms" ? phone : email}):`, err.message);
+    });
+};
+
 const sendOtp = async (req, res) => {
     try {
         const { phone, email, channel } = req.body;
+
+        if (channel === "sms") {
+            if (!phone) {
+                return res.status(400).json({ message: "Phone number is required to send an SMS OTP" });
+            }
+        } else if (!email || !validator.isEmail(email)) {
+            return res.status(400).json({ message: "A valid email and phone number is required to send an OTP" });
+        }
 
         const otp = generateOTP();
         const expires_at = new Date(Date.now() + 10 * 60 * 1000); // 10 min expiry
         const otp_reference = uuidv4()
 
-        await OtpCode.create({ otp_code: otp, otp_reference, channel, phone, expires_at });
+        await OtpCode.create({ otp_code: otp, otp_reference, channel, phone, email, expires_at });
 
-        // await sendSms(phone, `Your Verification code is: ${otp}`);
-        await sendEmail(email, "Your Verification Code", `<p> <b>${otp}</b> is your verification code</p><p>Do not share this code.</p>`);
-        //Add WhatsApp
-        return res.json({ message: "OTP sent successfully", otp_reference });
+        deliverOtpInBackground({ channel, phone, email, otp, label: "verification code" });
+
+        return res.json({ message: "OTP is being sent", otp_reference });
     } catch (err) {
-        console.log(err);
+        console.error(err);
         res.status(500).json({ message: "Server error" });
     }
 };
@@ -162,16 +206,12 @@ const verifyOtp = async (req, res) => {
             used: false,
             expires_at: { $gte: new Date() }
         });
-        console.log(otpRecord)
 
         if (!otpRecord) {
             return res.status(400).json({ message: "Invalid or expired OTP" });
         }
 
-        otpRecord.delete()
-
-        // otpRecord.used = true;
-        // await otpRecord.save();
+        await otpRecord.deleteOne();
 
         return res.json({ message: "OTP verified successfully" });
     } catch (err) {
@@ -182,7 +222,15 @@ const verifyOtp = async (req, res) => {
 
 export const resendOtp = async (req, res) => {
     try {
-        const { otp_reference, channel, phone } = req.body;
+        const { otp_reference, channel, phone, email } = req.body;
+
+        if (channel === "sms") {
+            if (!phone) {
+                return res.status(400).json({ message: "Phone number is required to resend an SMS OTP" });
+            }
+        } else if (!email || !validator.isEmail(email)) {
+            return res.status(400).json({ message: "A valid email is required to resend an OTP" });
+        }
 
         const otpRecord = await OtpCode.findOne({ otp_reference });
 
@@ -210,14 +258,9 @@ export const resendOtp = async (req, res) => {
         otpRecord.expires_at = new Date(Date.now() + 10 * 60 * 1000);
         await otpRecord.save();
 
-        // Send OTP
-        if (channel === "sms") {
-            await sendSms(phone, `Your new verification code is: ${newOtp}`);
-        } else {
-            await sendEmail(email, "Your Verification Code", `<h1>${newOtp}</h1>`);
-        }
+        deliverOtpInBackground({ channel, phone, email, otp: newOtp, label: "new verification code" });
 
-        return res.json({ message: "New OTP sent successfully." });
+        return res.json({ message: "New OTP is being sent." });
     } catch (err) {
         console.log(err);
         res.status(500).json({ message: "Server error" });
@@ -276,4 +319,152 @@ const profile = async (req, res) => {
 }
 
 
-export { register, login, profile, generateOTP, sendOtp, verifyOtp };
+const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email || !validator.isEmail(email)) {
+            return res.status(400).json({ success: false, message: "A valid email is required" });
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "No account found with that email address" });
+        }
+
+        const resetToken = generateToken(
+            { id: user._id, purpose: "password_reset" },
+            { expiresIn: "15m" }
+        );
+
+        const resetLink = `${process.env.FRONTEND_URL}/welcome/reset-password?token=${resetToken}`;
+
+        sendEmail(
+            email,
+            "Reset Your Password",
+            `<p>You requested a password reset. Click the link below to set a new password. This link expires in 15 minutes.</p>
+             <p><a href="${resetLink}">Reset Password</a></p>
+             <p>If you did not request this, you can safely ignore this email.</p>`
+        ).catch((err) => {
+            console.error("Password reset email delivery failed:", err.message);
+        });
+
+        return res.json({ success: true, message: "Password reset link sent to your email" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+const resetPassword = async (req, res) => {
+    try {
+        const { token, password:newPassword } = req.body;
+
+        if (!token || !newPassword) {
+            return res.status(400).json({ success: false, message: "Token and new password are required" });
+        }
+
+        if (newPassword.length < 8) {
+            return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+        }
+
+        let decoded;
+        try {
+            decoded = verifyToken(token);
+        } catch {
+            return res.status(400).json({ success: false, message: "Invalid or expired reset link" });
+        }
+
+        if (decoded.purpose !== "password_reset") {
+            return res.status(400).json({ success: false, message: "Invalid reset token" });
+        }
+
+        const user = await User.findById(decoded.id);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        // const isSamePassword = await comparePassword(newPassword, user.password);
+        // if (isSamePassword) {
+        //     return res.status(400).json({ success: false, message: "The new password must be different from your current password" });
+        // }
+
+        // Check common variations against the old hash to catch similar passwords.
+        // We can't reverse the hash, so we test transformed versions of the new password.
+        // const variations = [...new Set([
+        //     newPassword.toLowerCase(),
+        //     newPassword.toUpperCase(),
+        //     newPassword.replace(/\d+$/, ''),   // trailing digits removed
+        //     newPassword.replace(/^\d+/, ''),   // leading digits removed
+        //     newPassword.replace(/[^a-zA-Z]/g, ''), // letters only
+        // ])].filter(v => v !== newPassword && v.length >= 6);
+
+        // for (const variant of variations) {
+        //     if (await comparePassword(variant, user.password)) {
+        //         return res.status(400).json({ success: false, message: "The new password is too similar to your current password. Please choose a different password." });
+        //     }
+        // }
+
+        user.password = await hashPassword(newPassword);
+        await user.save();
+
+        return res.json({ success: true, message: "Password reset successfully" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+const passwordSimilarityRatio = (a, b) => {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, (_, i) =>
+        Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+    );
+    for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+            dp[i][j] = a[i - 1] === b[j - 1]
+                ? dp[i - 1][j - 1]
+                : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    return 1 - dp[m][n] / Math.max(m, n);
+};
+
+const changePassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ success: false, message: "Current and new password are required" });
+        }
+
+        if (newPassword.length < 8) {
+            return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+        }
+
+        const user = await User.findById(req.user._id);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const isMatch = await comparePassword(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ success: false, message: "Current password is incorrect" });
+        }
+
+        if (passwordSimilarityRatio(currentPassword, newPassword) >= 0.7) {
+            return res.status(400).json({ success: false, message: "New password is too similar to your current password" });
+        }
+
+        user.password = await hashPassword(newPassword);
+        await user.save();
+
+        return res.json({ success: true, message: "Password changed successfully" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+export { register, login, profile, generateOTP, sendOtp, verifyOtp, forgotPassword, resetPassword, changePassword };

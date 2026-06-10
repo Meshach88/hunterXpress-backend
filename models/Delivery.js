@@ -53,9 +53,22 @@ const deliverySchema = new mongoose.Schema(
     },
     confirmed_by_customer: { type: Boolean, default: false },
     payment_status: { type: String, enum: ["pending", "paid"], default: "pending" },
+    status_history: [
+      {
+        status: { type: String, required: true },
+        timestamp: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );
+
+deliverySchema.pre("save", function (next) {
+  if (this.isModified("delivery_status") || this.isNew) {
+    this.status_history.push({ status: this.delivery_status });
+  }
+  next();
+});
 
 const Delivery = mongoose.models.Delivery || mongoose.model('Delivery', deliverySchema);
 

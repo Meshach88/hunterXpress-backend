@@ -86,7 +86,7 @@ const courierSchema = new mongoose.Schema(
         
         current_order_id: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Order",
+            ref: "Delivery",
             default: null
         },
 

@@ -1,8 +1,9 @@
 import express from 'express';
-import { register, login, profile, sendOtp, verifyOtp, resendOtp } from '../controllers/authController.js';
+import { register, login, profile, sendOtp, verifyOtp, resendOtp, forgotPassword, resetPassword, changePassword } from '../controllers/authController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import upload from "../middleware/upload.js";
 import { loginLimiter } from '../middleware/loginLimiter.js';
+import { otpLimiter } from '../middleware/otpLimiter.js';
 
 const userRouter = express.Router();
 
@@ -12,11 +13,14 @@ userRouter.post('/register',
         { name: "proofOfAddress", maxCount: 1 },
     ]),
     register);
-userRouter.post('/sendOtp', sendOtp);
+userRouter.post('/sendOtp', otpLimiter, sendOtp);
 userRouter.post('/verifyOtp', verifyOtp);
-userRouter.post('/resendOtp', resendOtp);
+userRouter.post('/resendOtp', otpLimiter, resendOtp);
 userRouter.post('/login', loginLimiter, login);
 userRouter.get('/profile', authMiddleware, profile)
+userRouter.post('/forgotPassword', forgotPassword);
+userRouter.post('/resetPassword', resetPassword);
+userRouter.post('/changePassword', authMiddleware, changePassword);
 
 export default userRouter;
 

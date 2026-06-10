@@ -1,4 +1,4 @@
-import Courier from "../models/Courier.js";
+import { getNearbyCouriers } from "../services/dispatchService.js";
 
 export const findNearbyCouriers = async (req, res) => {
 
@@ -6,28 +6,7 @@ export const findNearbyCouriers = async (req, res) => {
 
         const { latitude, longitude } = req.body;
 
-        const freshnessLimit = new Date(Date.now() - 30000);
-
-        const couriers = await Courier.find({
-
-            is_online: true,
-            is_available: true,
-
-            location_updated_at: {
-                $gte: freshnessLimit
-            },
-
-            location: {
-                $near: {
-                    $geometry: {
-                        type: "Point",
-                        coordinates: [longitude, latitude]
-                    },
-                    $maxDistance: 5000
-                }
-            }
-
-        }).limit(5);
+        const couriers = await getNearbyCouriers(latitude, longitude);
 
         return res.json({
             success: true,

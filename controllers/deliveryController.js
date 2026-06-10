@@ -1,6 +1,6 @@
 import Delivery from "../models/Delivery.js";
 import { v4 as uuidv4 } from "uuid";
-import { dispatchDelivery } from "../services/dispatchService.js";
+import { dispatchDelivery, getNearbyCouriers } from "../services/dispatchService.js";
 import Courier from "../models/Courier.js";
 
 /**
@@ -53,7 +53,20 @@ export const dispatchOrder = async (req, res) => {
     try {
         const order = await Delivery.findById(orderId);
 
-        const accepted = await dispatchDelivery(order);
+        if (!order) {
+            return res.status(404).json({ success: false, message: "Order not found" });
+        }
+
+        const couriers = await getNearbyCouriers(order.pickup_address.lat, order.pickup_address.lng);
+
+        if (!couriers.length) {
+            return res.json({
+                success: false,
+                message: "No couriers available nearby"
+            });
+        }
+
+        const accepted = await dispatchDelivery(order, couriers);
 
         if (!accepted) {
             return res.json({
@@ -65,7 +78,7 @@ export const dispatchOrder = async (req, res) => {
         order.delivery_status = "accepted";
         await order.save();
 
-        const courier = Courier.findById(order.courier_id);
+        const courier = await Courier.findById(order.courier_id);
 
         return res.status(200).json({
             success: true,
@@ -87,7 +100,7 @@ export const dispatchOrder = async (req, res) => {
 export const acceptDelivery = async (req, res) => {
     try {
         const { id } = req.params;
-        const courierId = req.user._id;
+        const courierId = req.user.id;
 
         const delivery = await Delivery.findById(id);
 
@@ -116,7 +129,7 @@ export const acceptDelivery = async (req, res) => {
 export const pickupDelivery = async (req, res) => {
     try {
         const { id } = req.params;
-        const courierId = req.user._id;
+        const courierId = req.user.id;
 
         const delivery = await Delivery.findById(id);
 
@@ -143,7 +156,7 @@ export const pickupDelivery = async (req, res) => {
 export const completeDelivery = async (req, res) => {
     try {
         const { id } = req.params;
-        const courierId = req.user._id;
+        const courierId = req.user.id;
         const { signature_url, photo_url } = req.body;
 
         const delivery = await Delivery.findById(id);
@@ -172,7 +185,7 @@ export const completeDelivery = async (req, res) => {
 export const confirmDelivery = async (req, res) => {
     try {
         const { id } = req.params;
-        const customerId = req.user._id;
+        const customerId = req.user.id;
 
         const delivery = await Delivery.findById(id);
 
@@ -190,6 +203,41 @@ export const confirmDelivery = async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Server error" });
+    }
+};
+
+/**
+ * @desc Get a single delivery by id (owner only)
+ * @route GET /api/deliveries/:id
+ * @access Private (Customer)
+ */
+export const getDeliveryById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const delivery = await Delivery.findById(id)
+            .populate("courier_id", "name phone profile_picture");
+
+        if (!delivery) return res.status(404).json({ success: false, message: "Order not found" });
+        if (delivery.customer_id.toString() !== req.user.id.toString())
+            return res.status(403).json({ success: false, message: "Unauthorized" });
+
+        const order = delivery.toObject();
+
+        if (delivery.courier_id) {
+            const courierProfile = await Courier.findOne({ user_id: delivery.courier_id._id })
+                .select("rating total_deliveries");
+
+            if (courierProfile) {
+                order.courier_id.rating = courierProfile.rating;
+                order.courier_id.total_deliveries = courierProfile.total_deliveries;
+            }
+        }
+
+        res.status(200).json({ success: true, order });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: "Server error" });
     }
 };
 

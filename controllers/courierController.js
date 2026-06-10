@@ -79,6 +79,13 @@ export const goOffline = async (req, res) => {
             { new: true }
         );
 
+        if (!courier) {
+            return res.status(404).json({
+                success: false,
+                message: "Courier profile not found"
+            });
+        }
+
         return res.json({
             success: true,
             message: "Courier is now offline",

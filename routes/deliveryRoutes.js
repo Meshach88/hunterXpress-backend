@@ -6,6 +6,7 @@ import {
   completeDelivery,
   confirmDelivery,
   getMyDeliveries,
+  getDeliveryById,
   dispatchOrder,
 } from "../controllers/deliveryController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
@@ -32,6 +33,9 @@ deliveryRouter.patch("/:id/confirm", authMiddleware, confirmDelivery);
 
 // Fetch customer's deliveries
 deliveryRouter.get("/my-orders", authMiddleware, getMyDeliveries);
+
+// Fetch a single delivery by id
+deliveryRouter.get("/:id", authMiddleware, getDeliveryById);
 
 
 export default deliveryRouter;
