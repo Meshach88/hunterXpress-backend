@@ -1,16 +1,14 @@
-import { courierSockets } from "../sockets/courierSocket.js";
-import { io } from "../index.js";
 import Courier from "../models/Courier.js";
-import { dispatchResponses } from "../events/dispatchEvents.js";
 
 const NEARBY_RADIUS_METERS = 5000;
 const NEARBY_FRESHNESS_MS = 30000;
 const NEARBY_LIMIT = 5;
 
-export const getNearbyCouriers = async (latitude, longitude) => {
+export const getNearbyCouriers = async (latitude, longitude, excludeIds = []) => {
     const freshnessLimit = new Date(Date.now() - NEARBY_FRESHNESS_MS);
 
     return Courier.find({
+        _id: { $nin: excludeIds },
         is_online: true,
         is_available: true,
         location_updated_at: { $gte: freshnessLimit },
@@ -26,50 +24,29 @@ export const getNearbyCouriers = async (latitude, longitude) => {
     }).limit(NEARBY_LIMIT);
 };
 
-export const dispatchDelivery = async (order, couriers) => {
+/**
+ * Assigns the order to the nearest available courier.
+ * Returns the assigned courier, or null if none are available.
+ */
+export const dispatchDelivery = async (order) => {
 
-    for (const courier of couriers) {
+    const couriers = await getNearbyCouriers(
+        order.pickup_address.lat,
+        order.pickup_address.lng,
+        order.rejected_couriers
+    );
 
-        const socketId = courierSockets.get(courier._id.toString());
+    if (!couriers.length) return null;
 
-        if (!socketId) continue;
+    const courier = couriers[0];
 
-        console.log("Sending order to courier:", courier._id);
+    order.assigned_courier_id = courier._id;
+    order.delivery_status = "assigned";
+    await order.save();
 
-        io.to(socketId).emit("new_delivery_request", {
-            order
-        });
+    courier.is_available = false;
+    courier.current_order_id = order._id;
+    await courier.save();
 
-        const accepted = await waitForCourierResponse(order._id, courier._id);
-
-        if (accepted) {
-            order.courier_id = courier._id;
-            await order.save();
-            console.log("Courier accepted order");
-            return true;
-        }
-    }
-
-    console.log("No courier accepted the order");
-    return false;
-};
-
-const waitForCourierResponse = (orderId, courierId) => {
-
-    return new Promise((resolve) => {
-
-        const timeout = setTimeout(() => {
-            resolve(false);
-        }, 10000);
-
-        dispatchResponses.once(`${orderId}_${courierId}`, (accepted) => {
-
-            clearTimeout(timeout);
-
-            resolve(accepted);
-
-        });
-
-    });
-
+    return courier;
 };

@@ -10,6 +10,12 @@ const deliverySchema = new mongoose.Schema(
       ref: "Courier",
       default: null
     },
+    rejected_couriers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Courier"
+      }
+    ],
     sender: { type: String, required: true },
     pickup_address: {
       type: {
@@ -39,7 +45,7 @@ const deliverySchema = new mongoose.Schema(
     price: { type: Number, required: true },
     delivery_status: {
       type: String,
-      enum: ["pending", "assigned", "accepted", "picked_up", "in_transit", "delivered", "confirmed", "cancelled"],
+      enum: ["pending", "assigned", "accepted", "picked_up", "in_transit", "delivered", "confirmed", "completed", "cancelled"],
       default: "pending",
     },
     delivery_type: {

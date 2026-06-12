@@ -66,6 +66,57 @@ export const goOnline = async (req, res) => {
     }
 };
 
+export const updateLocation = async (req, res) => {
+    try {
+        const courierId = req.user.id;
+        const { latitude, longitude } = req.body;
+
+        if (
+            typeof latitude !== "number" ||
+            typeof longitude !== "number" ||
+            latitude < -90 || latitude > 90 ||
+            longitude < -180 || longitude > 180
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid coordinates"
+            });
+        }
+
+        const courier = await Courier.findOneAndUpdate(
+            { user_id: courierId },
+            {
+                location: {
+                    type: "Point",
+                    coordinates: [longitude, latitude],
+                },
+                location_updated_at: new Date(),
+            },
+            { new: true }
+        );
+
+        if (!courier) {
+            return res.status(404).json({
+                success: false,
+                message: "Courier profile not found"
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Location updated",
+            location: courier.location
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            success: false,
+            message: "Server error"
+        });
+    }
+};
+
 export const goOffline = async (req, res) => {
     try {
         const courierId = req.user.id;

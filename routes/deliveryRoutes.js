@@ -2,6 +2,7 @@ import express from "express";
 import {
   createDelivery,
   acceptDelivery,
+  rejectDelivery,
   pickupDelivery,
   completeDelivery,
   confirmDelivery,
@@ -21,6 +22,9 @@ deliveryRouter.post("/dispatch", authMiddleware, dispatchOrder);
 
 // Courier accepts an order
 deliveryRouter.patch("/:id/accept", authMiddleware, acceptDelivery);
+
+// Courier rejects an assigned order (reassigns to next nearest courier)
+deliveryRouter.patch("/:id/reject", authMiddleware, rejectDelivery);
 
 // Courier confirms pickup
 deliveryRouter.patch("/:id/pickup", authMiddleware, pickupDelivery);

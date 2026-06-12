@@ -1,8 +1,9 @@
 import axios from "axios";
 import Delivery from "../models/Delivery.js";
-import { io } from "../index.js";
-import { courierSockets } from "../sockets/courierSocket.js";
 import Courier from "../models/Courier.js";
+import User from "../models/User.js";
+import { sendOrderStatusEmail } from "../utils/notifications.js";
+import { dispatchDelivery } from "../services/dispatchService.js";
 
 // ✅ Initialize payment (customer pays for delivery)
 export const initializePayment = async (req, res) => {
@@ -66,22 +67,23 @@ export const verifyPayment = async (req, res) => {
         const data = verifyRes.data.data;
         // console.log(data);
         if (data.status === "success") {
-            const { orderId, courierId } = data.metadata;
+            const { orderId } = data.metadata;
 
             const order = await Delivery.findByIdAndUpdate(orderId, {
                 payment_status: "paid",
                 delivery_status: "confirmed",
+            }, { new: true });
+
+            const customer = await User.findById(order.customer_id);
+            sendOrderStatusEmail(customer?.email, "confirmed", order);
+
+            const courier = await dispatchDelivery(order);
+
+            return res.json({
+                success: true,
+                message: "Payment verified successfully",
+                dispatched: !!courier,
             });
-
-            // const socketId = courierSockets.get(courierId.toString());
-
-            // if (socketId) {
-            //     io.of("/courier").to(socketId).emit("order confirmed", {
-            //         order
-            //     });
-            // }
-
-            return res.json({ success: true, message: "Payment verified successfully" });
         } else {
             return res.json({ success: false, message: "Payment verification failed" });
         }
