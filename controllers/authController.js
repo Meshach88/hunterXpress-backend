@@ -5,13 +5,23 @@ import OtpCode from "../models/OtpCode.js";
 import { sendSms } from "../utils/sendSMS.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import validator from 'validator';
-import { hashPassword, comparePassword } from "../services/hashService.js";
-import { generateToken, verifyToken } from "../services/jwtService.js";
+import RefreshToken from "../models/RefreshToken.js";
+import { hashPassword, comparePassword, hashToken } from "../services/hashService.js";
+import { generateToken, verifyToken, generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../services/jwtService.js";
 import { v4 as uuidv4 } from 'uuid';
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 import { v2 as cloudinary } from "cloudinary";
 
 const ALLOWED_ROLES = ["customer", "courier"];
+
+const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const REFRESH_TOKEN_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: REFRESH_TOKEN_MAX_AGE_MS,
+};
 
 const register = async (req, res) => {
 
@@ -297,12 +307,21 @@ const login = async (req, res) => {
         if (!isMatch) {
             return res.json({ success: false, message: "Invalid credentials" });
         }
-        const token = generateToken({ id: user._id, email: user.email })
+        const token = generateAccessToken({ id: user._id, email: user.email })
+        const refreshToken = generateRefreshToken({ id: user._id })
+
+        await RefreshToken.create({
+            user_id: user._id,
+            token: hashToken(refreshToken),
+            expiresAt: new Date(Date.now() + REFRESH_TOKEN_MAX_AGE_MS),
+        });
+
+        res.cookie("refreshToken", refreshToken, REFRESH_TOKEN_COOKIE_OPTIONS);
 
         let profile = null;
         if (user.role === "courier") profile = await Courier.findOne({ user_id: user._id });
         if (user.role === "customer") profile = await Customer.findOne({ user_id: user._id });
-        return res.json({ success: true, message: "Login successful", token, user, profile });
+        return res.json({ success: true, message: "Login successful", token, refreshToken, user, profile });
 
     } catch (error) {
         console.error(error);
@@ -467,4 +486,59 @@ const changePassword = async (req, res) => {
     }
 };
 
-export { register, login, profile, generateOTP, sendOtp, verifyOtp, forgotPassword, resetPassword, changePassword };
+const refreshAccessToken = async (req, res) => {
+    try {
+        const refreshToken = req.cookies?.refreshToken;
+        if (!refreshToken) {
+            return res.status(401).json({ success: false, message: "No refresh token provided" });
+        }
+
+        let decoded;
+        try {
+            decoded = verifyRefreshToken(refreshToken);
+        } catch (error) {
+            return res.status(401).json({ success: false, message: "Invalid or expired refresh token" });
+        }
+
+        const storedToken = await RefreshToken.findOne({
+            user_id: decoded.id,
+            token: hashToken(refreshToken),
+            revoked: false,
+        });
+
+        if (!storedToken || storedToken.expiresAt < new Date()) {
+            return res.status(401).json({ success: false, message: "Invalid or expired refresh token" });
+        }
+
+        const user = await User.findById(decoded.id);
+        if (!user) {
+            return res.status(401).json({ success: false, message: "User not found" });
+        }
+
+        const token = generateAccessToken({ id: user._id, email: user.email });
+        return res.json({ success: true, token, refreshToken });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+const logout = async (req, res) => {
+    try {
+        const refreshToken = req.cookies?.refreshToken;
+        if (refreshToken) {
+            await RefreshToken.updateOne(
+                { user_id: req.user.id, token: hashToken(refreshToken) },
+                { revoked: true }
+            );
+        }
+
+        res.clearCookie("refreshToken", REFRESH_TOKEN_COOKIE_OPTIONS);
+        return res.json({ success: true, message: "Logged out successfully" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+export { register, login, profile, generateOTP, sendOtp, verifyOtp, forgotPassword, resetPassword, changePassword, refreshAccessToken, logout };

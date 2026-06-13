@@ -4,6 +4,7 @@ import userRouter from './routes/userRoute.js';
 import deliveryRouter from "./routes/deliveryRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import 'dotenv/config';
 import courierRouter from './routes/courierRoutes.js';
 import dispatchRouter from './routes/dispatchRouter.js';
@@ -18,8 +19,10 @@ const port = process.env.PORT || 3000;
 app.use(cors({
     origin: process.env.FRONTEND_URL,
     methods: ["GET", "POST", "PATCH", "DELETE"],
+    credentials: true,
 }));
 app.use(express.json());
+app.use(cookieParser());
 
 // DB connection
 connectDB();

@@ -13,7 +13,7 @@ import { sendOrderStatusEmail } from "../utils/notifications.js";
  */
 export const createDelivery = async (req, res) => {
     try {
-        console.log('Delivery request', req.body)
+        // console.log('Delivery request', req.body)
         const { sender, recipient, price, distance_km, estimated_time, photo, delivery_type } = req.body;
         const package_details = JSON.parse(req.body.package_details)
         const pickup_address = JSON.parse(req.body.pickup_address)
