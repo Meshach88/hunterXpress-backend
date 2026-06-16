@@ -1,5 +1,5 @@
 import express from 'express';
-import { register, login, profile, sendOtp, verifyOtp, resendOtp, forgotPassword, resetPassword, changePassword, refreshAccessToken, logout } from '../controllers/authController.js';
+import { register, login, profile, updateProfilePicture, sendOtp, verifyOtp, resendOtp, forgotPassword, resetPassword, changePassword, refreshAccessToken, logout } from '../controllers/authController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import upload from "../middleware/upload.js";
 import { loginLimiter } from '../middleware/loginLimiter.js';
@@ -20,6 +20,7 @@ userRouter.post('/login', loginLimiter, login);
 userRouter.post('/refresh', refreshAccessToken);
 userRouter.post('/logout', authMiddleware, logout);
 userRouter.get('/profile', authMiddleware, profile)
+userRouter.patch('/profile/picture', authMiddleware, updateProfilePicture)
 userRouter.post('/forgotPassword', forgotPassword);
 userRouter.post('/resetPassword', resetPassword);
 userRouter.post('/changePassword', authMiddleware, changePassword);

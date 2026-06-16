@@ -7,24 +7,83 @@ import User from "../models/User.js";
 import Rating from "../models/Rating.js";
 import { sendOrderStatusEmail } from "../utils/notifications.js";
 
+const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
+
+const isValidAddress = (address) =>
+    address
+    && typeof address.address === "string" && address.address.trim().length > 0
+    && typeof address.lat === "number" && !Number.isNaN(address.lat)
+    && typeof address.lng === "number" && !Number.isNaN(address.lng);
+
 /**
  * @desc Customer creates a new delivery order
  * @route POST /api/deliveries
  */
 export const createDelivery = async (req, res) => {
     try {
-        // console.log('Delivery request', req.body)
-        const { sender, recipient, price, distance_km, estimated_time, photo, delivery_type } = req.body;
-        const package_details = JSON.parse(req.body.package_details)
-        const pickup_address = JSON.parse(req.body.pickup_address)
-        const dropoff_address = JSON.parse(req.body.dropoff_address)
+        console.log('Delivery request', req.body)
+        const { sender, sender_phone, sender_alt_phone, recipient, recipient_phone, recipient_alt_phone, price, distance_km, estimated_time, photo, delivery_type } = req.body;
+
+        if (!sender || !sender.trim()) {
+            return res.status(400).json({ message: "Sender's name is required" });
+        }
+        if (!recipient || !recipient.trim()) {
+            return res.status(400).json({ message: "Recipient's name is required" });
+        }
+        if (!sender_phone || !PHONE_REGEX.test(sender_phone)) {
+            return res.status(400).json({ message: "A valid sender phone number is required" });
+        }
+        if (!recipient_phone || !PHONE_REGEX.test(recipient_phone)) {
+            return res.status(400).json({ message: "A valid recipient phone number is required" });
+        }
+        if (sender_alt_phone && !PHONE_REGEX.test(sender_alt_phone)) {
+            return res.status(400).json({ message: "Sender's alternate phone number is invalid" });
+        }
+        if (recipient_alt_phone && !PHONE_REGEX.test(recipient_alt_phone)) {
+            return res.status(400).json({ message: "Recipient's alternate phone number is invalid" });
+        }
+        if (!["send", "receive"].includes(delivery_type)) {
+            return res.status(400).json({ message: "Invalid delivery type" });
+        }
+        if (price == null || isNaN(price) || Number(price) <= 0) {
+            return res.status(400).json({ message: "Invalid delivery price" });
+        }
+        if (distance_km == null || isNaN(distance_km) || Number(distance_km) <= 0) {
+            return res.status(400).json({ message: "Invalid distance" });
+        }
+        if (estimated_time == null || isNaN(estimated_time) || Number(estimated_time) <= 0) {
+            return res.status(400).json({ message: "Invalid estimated time" });
+        }
+
+        let package_details, pickup_address, dropoff_address;
+        try {
+            package_details = JSON.parse(req.body.package_details);
+            pickup_address = JSON.parse(req.body.pickup_address);
+            dropoff_address = JSON.parse(req.body.dropoff_address);
+        } catch (parseErr) {
+            return res.status(400).json({ message: "Invalid address or package details" });
+        }
+
+        if (!package_details?.description || !package_details.description.trim()) {
+            return res.status(400).json({ message: "Package description is required" });
+        }
+        if (!isValidAddress(pickup_address)) {
+            return res.status(400).json({ message: "A valid pickup address is required" });
+        }
+        if (!isValidAddress(dropoff_address)) {
+            return res.status(400).json({ message: "A valid drop-off address is required" });
+        }
 
         const order = await Delivery.create({
             order_reference: `ord${uuidv4().replace(/-/g, "").slice(0, 8)}`,
             customer_id: req.user.id,
             sender,
+            sender_phone,
+            sender_alt_phone,
             pickup_address,
             recipient,
+            recipient_phone,
+            recipient_alt_phone,
             dropoff_address,
             package_details,
             photo_upload: photo,

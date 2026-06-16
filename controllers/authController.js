@@ -13,6 +13,8 @@ import { uploadToCloudinary } from "../utils/cloudinary.js";
 import { v2 as cloudinary } from "cloudinary";
 
 const ALLOWED_ROLES = ["customer", "courier"];
+const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
+const ALLOWED_DELIVERY_METHODS = ["Bike", "Car", "Van", "Truck"];
 
 const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -28,10 +30,16 @@ const register = async (req, res) => {
     try {
         const { name, email, phone, password, role, otp, otp_reference } = req.body;
 
-        console.log(name, email, phone, password, role, otp, otp_reference);
+        if (!name || !name.trim()) {
+            return res.status(400).json({ status: false, message: "Full name is required" });
+        }
 
         if (!validator.isEmail(email)) {
             return res.status(400).json({ status: false, message: "Invalid email" });
+        }
+
+        if (!phone || !PHONE_REGEX.test(phone)) {
+            return res.status(400).json({ status: false, message: "A valid phone number is required" });
         }
 
         if (!password || password.length < 8) {
@@ -44,6 +52,16 @@ const register = async (req, res) => {
 
         if (!otp || !otp_reference) {
             return res.status(400).json({ status: false, message: "OTP verification is required" });
+        }
+
+        if (role === "courier") {
+            // Vehicle/document/payout details are optional at signup time -
+            // couriers can skip this step and complete their profile later.
+            const { deliveryMethod } = req.body;
+
+            if (deliveryMethod && !ALLOWED_DELIVERY_METHODS.includes(deliveryMethod)) {
+                return res.status(400).json({ status: false, message: "Invalid delivery method" });
+            }
         }
 
         const existingUser = await User.findOne({
@@ -337,6 +355,31 @@ const profile = async (req, res) => {
     })
 }
 
+const updateProfilePicture = async (req, res) => {
+    try {
+        const { profile_picture } = req.body;
+
+        if (!profile_picture) {
+            return res.status(400).json({ success: false, message: "profile_picture URL is required" });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { profile_picture },
+            { new: true }
+        );
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        res.json({ success: true, message: "Profile picture updated", user });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+}
+
 
 const forgotPassword = async (req, res) => {
     try {
@@ -541,4 +584,4 @@ const logout = async (req, res) => {
     }
 };
 
-export { register, login, profile, generateOTP, sendOtp, verifyOtp, forgotPassword, resetPassword, changePassword, refreshAccessToken, logout };
+export { register, login, profile, updateProfilePicture, generateOTP, sendOtp, verifyOtp, forgotPassword, resetPassword, changePassword, refreshAccessToken, logout };

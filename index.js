@@ -7,6 +7,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import 'dotenv/config';
 import courierRouter from './routes/courierRoutes.js';
+import customerRouter from './routes/customerRoutes.js';
 import dispatchRouter from './routes/dispatchRouter.js';
 import cron from 'node-cron';
 import { cleanupInactiveCouriers } from './jobs/courierCleanupJob.js';
@@ -30,6 +31,7 @@ connectDB();
 // Routes
 app.use('/api/user', userRouter);
 app.use('/api/courier', courierRouter);
+app.use('/api/customer', customerRouter);
 app.use('/api/dispatch', dispatchRouter);
 app.use("/api/deliveries", deliveryRouter);
 app.use("/api/payment", paymentRoutes);

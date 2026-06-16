@@ -8,50 +8,52 @@ const courierSchema = new mongoose.Schema(
             required: true
         },
 
+        // Vehicle, document and payout details are optional at signup time -
+        // couriers can skip this step and complete their profile later.
         deliveryMethod: {
             type: String,
-            enum: ["Bike", "Car", "Van", "Truck"],
-            required: true
+            enum: ["Bike", "Car", "Van", "Truck", ""],
+            default: ""
         },
 
         plateNumber: {
             type: String,
-            required: true
+            default: ""
         },
 
         model: {
             type: String,
-            required: true
+            default: ""
         },
 
         color: {
             type: String,
-            required: true
+            default: ""
         },
 
         validId: {
             type: String,
-            required: true
+            default: ""
         },
 
         proofOfAddress: {
             type: String,
-            required: true
+            default: ""
         },
 
         payoutMethod: {
             type: String,
-            required: true
+            default: ""
         },
 
         accountNumber: {
             type: String,
-            required: true
+            default: ""
         },
 
         bankName: {
             type: String,
-            required: true
+            default: ""
         },
 
         rating: {

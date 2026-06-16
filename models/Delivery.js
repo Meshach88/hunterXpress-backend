@@ -26,6 +26,10 @@ const deliverySchema = new mongoose.Schema(
       required: true
     },
     recipient: { type: String, required: true },
+    recipient_phone: { type: String, required: true },
+    recipient_alt_phone: { type: String },
+    sender_phone: { type: String, required: true },
+    sender_alt_phone: { type: String },
     dropoff_address: {
       type: {
         address: { type: String, required: true },

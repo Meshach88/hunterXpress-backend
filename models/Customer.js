@@ -14,8 +14,10 @@ const addressSchema = new mongoose.Schema({
 const customerSchema = new mongoose.Schema(
   {
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    pickUpAddress: { type: String, required: true },
-    address: { type: String, required: true },
+    // Addresses are optional at signup time - customers can skip this step
+    // and complete their profile later.
+    pickUpAddress: { type: String, default: "" },
+    address: { type: String, default: "" },
     total_orders: { type: Number, default: 0 },
     average_rating: { type: Number, default: 0 },
     last_order_at: { type: Date },
