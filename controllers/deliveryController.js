@@ -340,6 +340,44 @@ export const confirmDelivery = async (req, res) => {
 };
 
 /**
+ * @desc Customer cancels an order (only while courier hasn't been accepted yet)
+ * @route PATCH /api/deliveries/:id/cancel
+ * @access Private (Customer)
+ */
+export const cancelDelivery = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const customerId = req.user.id;
+
+        const delivery = await Delivery.findById(id);
+
+        if (!delivery) return res.status(404).json({ message: "Order not found" });
+        if (delivery.customer_id.toString() !== customerId.toString())
+            return res.status(403).json({ message: "Unauthorized" });
+
+        const cancellableStatuses = ["pending"];
+        if (!cancellableStatuses.includes(delivery.delivery_status))
+            return res.status(400).json({ message: "Order cannot be cancelled at this stage" });
+
+        if (delivery.assigned_courier_id) {
+            await Courier.findByIdAndUpdate(delivery.assigned_courier_id, {
+                is_available: true,
+                current_order_id: null,
+            });
+        }
+
+        delivery.delivery_status = "cancelled";
+        delivery.assigned_courier_id = null;
+        await delivery.save();
+
+        res.json({ message: "Order cancelled successfully", delivery });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
+/**
  * @desc Get a single delivery by id (owner only)
  * @route GET /api/deliveries/:id
  * @access Private (Customer)

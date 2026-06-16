@@ -6,6 +6,7 @@ import {
   pickupDelivery,
   completeDelivery,
   confirmDelivery,
+  cancelDelivery,
   getMyDeliveries,
   getDeliveryById,
   dispatchOrder,
@@ -34,6 +35,9 @@ deliveryRouter.patch("/:id/complete", authMiddleware, completeDelivery);
 
 // Customer confirms delivery
 deliveryRouter.patch("/:id/confirm", authMiddleware, confirmDelivery);
+
+// Customer cancels an order
+deliveryRouter.patch("/:id/cancel", authMiddleware, cancelDelivery);
 
 // Fetch customer's deliveries
 deliveryRouter.get("/my-orders", authMiddleware, getMyDeliveries);

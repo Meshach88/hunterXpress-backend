@@ -36,6 +36,8 @@ export const dispatchDelivery = async (order) => {
         order.rejected_couriers
     );
 
+    console.log('Couriers found', couriers);
+
     if (!couriers.length) return null;
 
     const courier = couriers[0];
