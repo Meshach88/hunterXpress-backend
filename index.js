@@ -10,6 +10,7 @@ import courierRouter from './routes/courierRoutes.js';
 import customerRouter from './routes/customerRoutes.js';
 import dispatchRouter from './routes/dispatchRouter.js';
 import adminRouter from './routes/adminRoutes.js';
+import supportRouter from './routes/supportRoutes.js';
 import cron from 'node-cron';
 import { cleanupInactiveCouriers } from './jobs/courierCleanupJob.js';
 
@@ -39,6 +40,7 @@ app.use('/api/dispatch', dispatchRouter);
 app.use("/api/deliveries", deliveryRouter);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/admin", adminRouter);
+app.use("/api/support", supportRouter);
 
 app.get('/', (req, res) => {
     res.send('API working');

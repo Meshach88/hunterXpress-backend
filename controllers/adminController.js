@@ -3,6 +3,8 @@ import Courier from "../models/Courier.js";
 import Customer from "../models/Customer.js";
 import Delivery from "../models/Delivery.js";
 import Rating from "../models/Rating.js";
+import SupportConversation from "../models/SupportConversation.js";
+import SupportMessage from "../models/SupportMessage.js";
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -602,6 +604,116 @@ export const exportDeliveriesCSV = async (req, res) => {
         res.setHeader("Content-Type", "text/csv");
         res.setHeader("Content-Disposition", "attachment; filename=deliveries.csv");
         return res.send(csv);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+// ─── Support (admin side) ─────────────────────────────────────────────────────
+
+export const getSupportConversations = async (req, res) => {
+    try {
+        const { status, page = 1, limit = 30 } = req.query;
+        const filter = {};
+        if (status) filter.status = status;
+
+        const skip = (Number(page) - 1) * Number(limit);
+        const [conversations, total] = await Promise.all([
+            SupportConversation.find(filter)
+                .populate("customer_id", "name email profile_picture")
+                .sort({ last_message_at: -1, createdAt: -1 })
+                .skip(skip)
+                .limit(Number(limit)),
+            SupportConversation.countDocuments(filter),
+        ]);
+
+        return res.json({ success: true, conversations, total });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+export const getSupportMessages = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const conversation = await SupportConversation.findById(id).populate(
+            "customer_id",
+            "name email profile_picture"
+        );
+        if (!conversation) return res.status(404).json({ success: false, message: "Conversation not found" });
+
+        // Mark as read by admin
+        if (conversation.unread_by_admin > 0) {
+            await SupportConversation.findByIdAndUpdate(id, { unread_by_admin: 0 });
+        }
+
+        const messages = await SupportMessage.find({ conversation_id: id })
+            .populate("sender_id", "name profile_picture")
+            .sort({ createdAt: 1 });
+
+        return res.json({ success: true, conversation, messages });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+export const sendSupportReply = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { body } = req.body;
+
+        if (!body?.trim()) {
+            return res.status(400).json({ success: false, message: "Message body is required" });
+        }
+
+        const conversation = await SupportConversation.findById(id);
+        if (!conversation) return res.status(404).json({ success: false, message: "Conversation not found" });
+        if (conversation.status === "closed") {
+            return res.status(400).json({ success: false, message: "Conversation is closed" });
+        }
+
+        const message = await SupportMessage.create({
+            conversation_id: id,
+            sender_id: req.adminUser._id,
+            sender_role: "admin",
+            body: body.trim(),
+        });
+
+        await SupportConversation.findByIdAndUpdate(id, {
+            last_message: body.trim().slice(0, 100),
+            last_message_at: new Date(),
+            status: "open",
+        });
+
+        const populated = await message.populate("sender_id", "name profile_picture");
+        return res.status(201).json({ success: true, message: populated });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+export const setSupportStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        const allowed = ["open", "paused", "closed"];
+        if (!allowed.includes(status)) {
+            return res.status(400).json({ success: false, message: "Invalid status" });
+        }
+
+        const conversation = await SupportConversation.findByIdAndUpdate(
+            req.params.id,
+            { status },
+            { new: true }
+        ).populate("customer_id", "name email profile_picture");
+
+        if (!conversation) return res.status(404).json({ success: false, message: "Conversation not found" });
+
+        return res.json({ success: true, conversation });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: "Server error" });

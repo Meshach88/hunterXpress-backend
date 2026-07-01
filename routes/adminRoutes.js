@@ -19,6 +19,10 @@ import {
     listRatings,
     deleteRating,
     exportDeliveriesCSV,
+    getSupportConversations,
+    getSupportMessages,
+    sendSupportReply,
+    setSupportStatus,
 } from "../controllers/adminController.js";
 
 const adminRouter = express.Router();
@@ -58,5 +62,11 @@ adminRouter.delete("/ratings/:id", deleteRating);
 
 // CSV export
 adminRouter.get("/export/deliveries", exportDeliveriesCSV);
+
+// Support conversations (admin side)
+adminRouter.get("/support/conversations", getSupportConversations);
+adminRouter.get("/support/conversations/:id", getSupportMessages);
+adminRouter.post("/support/conversations/:id/reply", sendSupportReply);
+adminRouter.patch("/support/conversations/:id/status", setSupportStatus);
 
 export default adminRouter;
