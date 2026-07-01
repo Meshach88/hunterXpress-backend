@@ -28,7 +28,7 @@ export const getDashboardStats = async (req, res) => {
                 delivery_status: { $in: ["assigned", "accepted", "picked_up", "in_transit"] },
             }),
             Delivery.countDocuments({
-                delivery_status: { $in: ["delivered", "confirmed", "completed"] },
+                delivery_status: { $in: ["delivered", "completed"] },
             }),
             Delivery.aggregate([
                 { $match: { payment_status: "paid", createdAt: { $gte: todayStart } } },
