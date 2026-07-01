@@ -325,6 +325,11 @@ const login = async (req, res) => {
         if (!isMatch) {
             return res.json({ success: false, message: "Invalid credentials" });
         }
+
+        if (user.is_suspended) {
+            return res.status(403).json({ success: false, message: "Account suspended. Contact support." });
+        }
+
         const token = generateAccessToken({ id: user._id, email: user.email })
         const refreshToken = generateRefreshToken({ id: user._id })
 

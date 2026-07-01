@@ -16,6 +16,7 @@ const userSchema = new mongoose.Schema(
     loginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date },
     last_login: { type: Date },
+    is_suspended: { type: Boolean, default: false },
   },
   {
     timestamps: true,
