@@ -186,27 +186,48 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 
 // Fire-and-forget: dispatches the OTP via SMS/email in the background so the
 // request doesn't block on a third-party API. Failures are logged, not thrown,
-// since the user can always request a resend.
+// since the user can always request a resend. channel:"all" fires both
+// channels concurrently so one provider being down doesn't block the other.
 const deliverOtpInBackground = ({ channel, phone, email, otp, label = "verification code" }) => {
-    const delivery = channel === "sms"
-        ? sendSms(phone, `Your ${label} is: ${otp}`)
-        : sendEmail(email, "Your Verification Code", `<p> <b>${otp}</b> is your ${label}</p><p>Do not share this code.</p>`);
+    const message = `Your OTP is: ${otp}`;
+    const html = `<p> <b>${otp}</b> is your ${label}</p><p>Do not share this code.</p>`;
 
-    delivery.catch((err) => {
-        console.error(`OTP delivery failed (channel=${channel}, target=${channel === "sms" ? phone : email}):`, err.message);
-    });
+    const deliveries = [];
+    if (channel === "sms" || channel === "all") {
+        deliveries.push(["sms", sendSms(phone, message)]);
+    }
+    if (channel === "email" || channel === "all") {
+        deliveries.push(["email", sendEmail(email, "Your Verification Code", html)]);
+    }
+
+    for (const [ch, delivery] of deliveries) {
+        delivery.catch((err) => {
+            console.error(`OTP delivery failed (channel=${ch}, target=${ch === "sms" ? phone : email}):`, err.message);
+        });
+    }
+};
+
+const validateOtpChannel = (channel, phone, email) => {
+    if (channel === "sms") {
+        if (!phone) return "Phone number is required to send an SMS OTP";
+    } else if (channel === "email") {
+        if (!email || !validator.isEmail(email)) return "A valid email is required to send an email OTP";
+    } else if (channel === "all") {
+        if (!phone || !PHONE_REGEX.test(phone)) return "A valid phone number is required";
+        if (!email || !validator.isEmail(email)) return "A valid email is required";
+    } else {
+        return "Invalid channel";
+    }
+    return null;
 };
 
 const sendOtp = async (req, res) => {
     try {
         const { phone, email, channel } = req.body;
 
-        if (channel === "sms") {
-            if (!phone) {
-                return res.status(400).json({ message: "Phone number is required to send an SMS OTP" });
-            }
-        } else if (!email || !validator.isEmail(email)) {
-            return res.status(400).json({ message: "A valid email and phone number is required to send an OTP" });
+        const channelError = validateOtpChannel(channel, phone, email);
+        if (channelError) {
+            return res.status(400).json({ message: channelError });
         }
 
         const otp = generateOTP();
@@ -252,12 +273,9 @@ export const resendOtp = async (req, res) => {
     try {
         const { otp_reference, channel, phone, email } = req.body;
 
-        if (channel === "sms") {
-            if (!phone) {
-                return res.status(400).json({ message: "Phone number is required to resend an SMS OTP" });
-            }
-        } else if (!email || !validator.isEmail(email)) {
-            return res.status(400).json({ message: "A valid email is required to resend an OTP" });
+        const channelError = validateOtpChannel(channel, phone, email);
+        if (channelError) {
+            return res.status(400).json({ message: channelError });
         }
 
         const otpRecord = await OtpCode.findOne({ otp_reference });
@@ -484,6 +502,86 @@ const resetPassword = async (req, res) => {
     }
 };
 
+// Mobile-only password reset: an OTP-based alternative to the web link flow
+// above, since a mobile app can't usefully open an emailed web link.
+const requestPasswordResetOtp = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email || !validator.isEmail(email)) {
+            return res.status(400).json({ success: false, message: "A valid email is required" });
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "No account found with that email address" });
+        }
+
+        const otp = generateOTP();
+        const expires_at = new Date(Date.now() + 10 * 60 * 1000);
+        const otp_reference = uuidv4();
+
+        await OtpCode.create({ otp_code: otp, otp_reference, channel: "all", phone: user.phone, email: user.email, expires_at });
+
+        deliverOtpInBackground({ channel: "all", phone: user.phone, email: user.email, otp, label: "password reset code" });
+
+        return res.json({ success: true, message: "A reset code has been sent to your phone and email", otp_reference });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+const confirmPasswordResetWithOtp = async (req, res) => {
+    try {
+        const { email, otp, otp_reference, newPassword } = req.body;
+
+        if (!email || !otp || !otp_reference || !newPassword) {
+            return res.status(400).json({ success: false, message: "Email, code and new password are required" });
+        }
+
+        if (newPassword.length < 8) {
+            return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+        }
+
+        const otpRecord = await OtpCode.findOne({
+            otp_code: otp,
+            otp_reference,
+            email,
+            used: false,
+            expires_at: { $gte: new Date() }
+        });
+
+        if (!otpRecord) {
+            return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
+        }
+
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        user.password = await hashPassword(newPassword);
+        await user.save();
+
+        await otpRecord.deleteOne();
+
+        // Password changed - revoke any outstanding refresh tokens so a
+        // previously stashed one can't keep minting access tokens.
+        await RefreshToken.updateMany(
+            { user_id: user._id, revoked: false },
+            { revoked: true }
+        );
+
+        return res.json({ success: true, message: "Password reset successfully" });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
 const passwordSimilarityRatio = (a, b) => {
     const m = a.length, n = b.length;
     const dp = Array.from({ length: m + 1 }, (_, i) =>
@@ -536,7 +634,7 @@ const changePassword = async (req, res) => {
 
 const refreshAccessToken = async (req, res) => {
     try {
-        const refreshToken = req.cookies?.refreshToken;
+        const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
         if (!refreshToken) {
             return res.status(401).json({ success: false, message: "No refresh token provided" });
         }
@@ -573,7 +671,7 @@ const refreshAccessToken = async (req, res) => {
 
 const logout = async (req, res) => {
     try {
-        const refreshToken = req.cookies?.refreshToken;
+        const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
         if (refreshToken) {
             await RefreshToken.updateOne(
                 { user_id: req.user.id, token: hashToken(refreshToken) },
@@ -589,4 +687,4 @@ const logout = async (req, res) => {
     }
 };
 
-export { register, login, profile, updateProfilePicture, generateOTP, sendOtp, verifyOtp, forgotPassword, resetPassword, changePassword, refreshAccessToken, logout };
+export { register, login, profile, updateProfilePicture, generateOTP, sendOtp, verifyOtp, forgotPassword, resetPassword, changePassword, refreshAccessToken, logout, requestPasswordResetOtp, confirmPasswordResetWithOtp };
