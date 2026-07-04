@@ -322,7 +322,11 @@ export const setCourierVerification = async (req, res) => {
 
 export const listDeliveries = async (req, res) => {
     try {
-        const { tab, search, page = 1, limit = 20 } = req.query;
+        const {
+            tab, search, page = 1, limit = 20,
+            sortBy = "createdAt", sortOrder = "desc",
+            status, dateFrom, dateTo,
+        } = req.query;
 
         const filter = {};
         if (tab === "prepaid") {
@@ -334,13 +338,28 @@ export const listDeliveries = async (req, res) => {
             filter.delivery_status = { $in: ["delivered", "confirmed", "completed"] };
         }
 
+        // Explicit status filter overrides tab's status constraint
+        if (status) filter.delivery_status = status;
+
         if (search) filter.order_reference = { $regex: search, $options: "i" };
 
+        if (dateFrom || dateTo) {
+            filter.createdAt = {};
+            if (dateFrom) filter.createdAt.$gte = new Date(dateFrom);
+            if (dateTo) {
+                const end = new Date(dateTo);
+                end.setHours(23, 59, 59, 999);
+                filter.createdAt.$lte = end;
+            }
+        }
+
+        const sortField = ["createdAt", "price"].includes(sortBy) ? sortBy : "createdAt";
+        const sortDir = sortOrder === "asc" ? 1 : -1;
         const skip = (Number(page) - 1) * Number(limit);
 
         const [deliveries, total] = await Promise.all([
             Delivery.find(filter)
-                .sort({ createdAt: -1 })
+                .sort({ [sortField]: sortDir })
                 .skip(skip)
                 .limit(Number(limit))
                 .populate("customer_id", "name phone email"),
