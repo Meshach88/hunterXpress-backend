@@ -226,6 +226,8 @@ export const pickupDelivery = async (req, res) => {
         if (!delivery) return res.status(404).json({ message: "Order not found" });
         if (delivery.courier_id.toString() !== courierId.toString())
             return res.status(403).json({ message: "Unauthorized" });
+        if (delivery.delivery_status !== "accepted")
+            return res.status(400).json({ message: "Order must be accepted before it can be picked up" });
 
         delivery.delivery_status = "picked_up";
         await delivery.save();
@@ -257,6 +259,8 @@ export const completeDelivery = async (req, res) => {
         if (!delivery) return res.status(404).json({ message: "Order not found" });
         if (delivery.courier_id.toString() !== courierId.toString())
             return res.status(403).json({ message: "Unauthorized" });
+        if (delivery.delivery_status !== "picked_up")
+            return res.status(400).json({ message: "Order must be picked up before it can be completed" });
 
         delivery.delivery_status = "delivered";
         delivery.proof_of_delivery = { signature_url, photo_url };

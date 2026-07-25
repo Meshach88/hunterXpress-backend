@@ -26,7 +26,15 @@ app.use(cors({
     methods: ["GET", "POST", "PATCH", "DELETE"],
     credentials: true,
 }));
-app.use(express.json());
+// Keep the raw body around (req.rawBody) alongside the parsed one - the
+// Paystack webhook needs to hash the exact bytes it received to verify
+// the request signature, which is impossible once the body's been parsed
+// and would need to be re-serialized.
+app.use(express.json({
+    verify: (req, res, buf) => {
+        req.rawBody = buf;
+    }
+}));
 app.use(cookieParser());
 
 // DB connection
