@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import 'dotenv/config';
 import Delivery from "../models/Delivery.js";
 import { v4 as uuidv4 } from "uuid";
 import { dispatchDelivery } from "../services/dispatchService.js";
@@ -8,6 +9,7 @@ import Rating from "../models/Rating.js";
 import { sendOrderStatusEmail } from "../utils/notifications.js";
 
 const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
+const COURIER_COMMISSION_RATE = parseFloat(process.env.COURIER_COMMISSION_RATE) || 0.6;
 
 const isValidAddress = (address) =>
     address
@@ -302,7 +304,7 @@ export const confirmDelivery = async (req, res) => {
 
         if (delivery.assigned_courier_id) {
             const courierUpdate = {
-                $inc: { total_deliveries: 1 },
+                $inc: { total_deliveries: 1, total_earnings: delivery.price * COURIER_COMMISSION_RATE },
                 is_available: true,
                 current_order_id: null,
             };

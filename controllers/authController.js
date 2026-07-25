@@ -122,7 +122,8 @@ const register = async (req, res) => {
                     proofOfAddress,
                     payoutMethod,
                     bankName,
-                    accountNumber
+                    accountNumber,
+                    courierAddress
                 } = req.body;
 
                 await Courier.create([{
@@ -135,7 +136,8 @@ const register = async (req, res) => {
                     proofOfAddress: proofUpload ? proofUpload.secure_url : proofOfAddress,
                     payoutMethod,
                     bankName,
-                    accountNumber
+                    accountNumber,
+                    address: courierAddress
                 }], { session });
 
             } else if (role === "customer") {

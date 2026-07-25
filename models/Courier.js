@@ -41,6 +41,11 @@ const courierSchema = new mongoose.Schema(
             default: ""
         },
 
+        address: {
+            type: String,
+            default: ""
+        },
+
         payoutMethod: {
             type: String,
             default: ""
@@ -106,6 +111,13 @@ const courierSchema = new mongoose.Schema(
 
         location_updated_at: {
             type: Date
+        },
+
+        // Set when the courier goes online, cleared when they go offline -
+        // used to compute how long they've been online this session.
+        online_since: {
+            type: Date,
+            default: null
         }
 
     },

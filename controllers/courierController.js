@@ -1,4 +1,5 @@
 import Courier from "../models/Courier.js";
+import Delivery from "../models/Delivery.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -34,6 +35,35 @@ export const getCourierData = async (req, res) => {
     }
 }
 
+export const getCurrentDelivery = async (req, res) => {
+    try {
+        const courier = await Courier.findOne({ user_id: req.user.id });
+
+        if (!courier) {
+            return res.status(404).json({
+                success: false,
+                message: "Courier profile not found"
+            });
+        }
+
+        if (!courier.current_order_id) {
+            return res.json({ success: true, delivery: null });
+        }
+
+        const delivery = await Delivery.findById(courier.current_order_id)
+            .populate("customer_id", "name phone email");
+
+        return res.json({ success: true, delivery: delivery || null });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            success: false,
+            message: "Server error"
+        });
+    }
+};
+
 export const goOnline = async (req, res) => {
     try {
         const courierId = req.user.id;
@@ -43,7 +73,8 @@ export const goOnline = async (req, res) => {
             {
                 is_online: true,
                 is_available: true, // also check if the courier is handling a delivery
-                location_updated_at: new Date()
+                location_updated_at: new Date(),
+                online_since: new Date()
             },
             { new: true }
         );
@@ -58,7 +89,7 @@ export const goOnline = async (req, res) => {
         return res.json({
             success: true,
             message: "Courier is now online",
-            // data: courier
+            courier
         });
 
     } catch (error) {
@@ -129,7 +160,8 @@ export const goOffline = async (req, res) => {
             { user_id: courierId },
             {
                 is_online: false,
-                is_available: false
+                is_available: false,
+                online_since: null
             },
             { new: true }
         );
@@ -144,7 +176,7 @@ export const goOffline = async (req, res) => {
         return res.json({
             success: true,
             message: "Courier is now offline",
-            // data: courier
+            courier
         });
 
     } catch (error) {
@@ -158,7 +190,7 @@ export const goOffline = async (req, res) => {
 
 export const updateCourierProfile = async (req, res) => {
     try {
-        const { deliveryMethod, plateNumber, model, color, payoutMethod, bankName, accountNumber } = req.body;
+        const { deliveryMethod, plateNumber, model, color, payoutMethod, bankName, accountNumber, address } = req.body;
 
         if (deliveryMethod && !ALLOWED_DELIVERY_METHODS.includes(deliveryMethod)) {
             return res.status(400).json({ success: false, message: "Invalid delivery method" });
@@ -172,6 +204,7 @@ export const updateCourierProfile = async (req, res) => {
         if (payoutMethod !== undefined) updates.payoutMethod = payoutMethod;
         if (bankName !== undefined) updates.bankName = bankName;
         if (accountNumber !== undefined) updates.accountNumber = accountNumber;
+        if (address !== undefined) updates.address = address;
 
         const validIdFile = req.files?.validId?.[0];
         const proofFile = req.files?.proofOfAddress?.[0];
