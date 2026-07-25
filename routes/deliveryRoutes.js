@@ -8,6 +8,7 @@ import {
   confirmDelivery,
   cancelDelivery,
   getMyDeliveries,
+  getMyCourierDeliveries,
   getDeliveryById,
   dispatchOrder,
 } from "../controllers/deliveryController.js";
@@ -41,6 +42,9 @@ deliveryRouter.patch("/:id/cancel", authMiddleware, cancelDelivery);
 
 // Fetch customer's deliveries
 deliveryRouter.get("/my-orders", authMiddleware, getMyDeliveries);
+
+// Fetch courier's deliveries
+deliveryRouter.get("/my-deliveries", authMiddleware, getMyCourierDeliveries);
 
 // Fetch a single delivery by id
 deliveryRouter.get("/:id", authMiddleware, getDeliveryById);

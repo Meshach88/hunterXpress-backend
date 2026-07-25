@@ -62,6 +62,10 @@ const deliverySchema = new mongoose.Schema(
       photo_url: String,
     },
     confirmed_by_customer: { type: Boolean, default: false },
+    // The courier's cut of `price` (per COURIER_COMMISSION_RATE), recorded
+    // once at confirmDelivery time so earnings history stays accurate even
+    // if the commission rate changes later.
+    courier_earning: { type: Number, default: 0 },
     payment_status: { type: String, enum: ["pending", "paid"], default: "pending" },
     status_history: [
       {

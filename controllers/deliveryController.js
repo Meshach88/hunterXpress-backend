@@ -258,25 +258,39 @@ export const completeDelivery = async (req, res) => {
 
         const delivery = await Delivery.findById(id);
 
-        if (!delivery) return res.status(404).json({ message: "Order not found" });
+        if (!delivery) return res.status(404).json({ success: false, message: "Order not found" });
         if (delivery.courier_id.toString() !== courierId.toString())
-            return res.status(403).json({ message: "Unauthorized" });
+            return res.status(403).json({ success: false, message: "Unauthorized" });
         if (delivery.delivery_status !== "picked_up")
-            return res.status(400).json({ message: "Order must be picked up before it can be completed" });
+            return res.status(400).json({ success: false, message: "Order must be picked up before it can be completed" });
 
         delivery.delivery_status = "delivered";
         delivery.proof_of_delivery = { signature_url, photo_url };
+        // Locked in the moment the courier's part of the job is done, so it
+        // shows up in their earnings immediately rather than waiting on the
+        // customer to confirm receipt.
+        delivery.courier_earning = delivery.price * COURIER_COMMISSION_RATE;
         await delivery.save();
+
+        // Credit the courier and free them up for a new dispatch as soon as
+        // their part is done - shouldn't depend on the customer confirming.
+        if (delivery.assigned_courier_id) {
+            await Courier.findByIdAndUpdate(delivery.assigned_courier_id, {
+                $inc: { total_deliveries: 1, total_earnings: delivery.courier_earning },
+                is_available: true,
+                current_order_id: null,
+            });
+        }
 
         // io.emit("delivery_completed", { deliveryId: id });
 
         const customer = await User.findById(delivery.customer_id);
         sendOrderStatusEmail(customer?.email, "delivered", delivery);
 
-        res.json({ message: "Delivery completed", delivery });
+        res.json({ success: true, message: "Delivery completed", delivery });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ message: "Server error" });
+        res.status(500).json({ success: false, message: "Server error" });
     }
 };
 
@@ -292,45 +306,39 @@ export const confirmDelivery = async (req, res) => {
 
         const delivery = await Delivery.findById(id);
 
-        if (!delivery) return res.status(404).json({ message: "Order not found" });
+        if (!delivery) return res.status(404).json({ success: false, message: "Order not found" });
         if (delivery.customer_id.toString() !== customerId.toString())
-            return res.status(403).json({ message: "Unauthorized" });
+            return res.status(403).json({ success: false, message: "Unauthorized" });
         if (delivery.delivery_status !== "delivered")
-            return res.status(400).json({ message: "Order must be delivered before it can be confirmed" });
+            return res.status(400).json({ success: false, message: "Order must be delivered before it can be confirmed" });
 
         delivery.delivery_status = "completed";
         delivery.confirmed_by_customer = true;
         await delivery.save();
 
-        if (delivery.assigned_courier_id) {
-            const courierUpdate = {
-                $inc: { total_deliveries: 1, total_earnings: delivery.price * COURIER_COMMISSION_RATE },
-                is_available: true,
-                current_order_id: null,
-            };
+        // Crediting the courier and freeing them up already happened in
+        // completeDelivery - this endpoint only handles the rating/review.
+        if (delivery.assigned_courier_id && rating) {
+            await Rating.findOneAndUpdate(
+                { delivery_id: delivery._id },
+                {
+                    delivery_id: delivery._id,
+                    customer_id: customerId,
+                    courier_id: delivery.assigned_courier_id,
+                    rating,
+                    comment,
+                },
+                { upsert: true, new: true }
+            );
 
-            if (rating) {
-                await Rating.findOneAndUpdate(
-                    { delivery_id: delivery._id },
-                    {
-                        delivery_id: delivery._id,
-                        customer_id: customerId,
-                        courier_id: delivery.assigned_courier_id,
-                        rating,
-                        comment,
-                    },
-                    { upsert: true, new: true }
-                );
+            const stats = await Rating.aggregate([
+                { $match: { courier_id: delivery.assigned_courier_id } },
+                { $group: { _id: null, avgRating: { $avg: "$rating" } } },
+            ]);
 
-                const stats = await Rating.aggregate([
-                    { $match: { courier_id: delivery.assigned_courier_id } },
-                    { $group: { _id: null, avgRating: { $avg: "$rating" } } },
-                ]);
-
-                courierUpdate.rating = stats[0]?.avgRating || rating;
-            }
-
-            await Courier.findByIdAndUpdate(delivery.assigned_courier_id, courierUpdate);
+            await Courier.findByIdAndUpdate(delivery.assigned_courier_id, {
+                rating: stats[0]?.avgRating || rating,
+            });
         }
 
         // io.emit("delivery_confirmed", { deliveryId: id });
@@ -338,10 +346,10 @@ export const confirmDelivery = async (req, res) => {
         const customer = await User.findById(delivery.customer_id);
         sendOrderStatusEmail(customer?.email, "completed", delivery);
 
-        res.json({ message: "Delivery confirmed successfully", delivery });
+        res.json({ success: true, message: "Delivery confirmed successfully", delivery });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ message: "Server error" });
+        res.status(500).json({ success: false, message: "Server error" });
     }
 };
 
@@ -384,9 +392,10 @@ export const cancelDelivery = async (req, res) => {
 };
 
 /**
- * @desc Get a single delivery by id (owner only)
+ * @desc Get a single delivery by id (the customer who placed it, or the
+ * courier who accepted it)
  * @route GET /api/deliveries/:id
- * @access Private (Customer)
+ * @access Private (Customer or Courier)
  */
 export const getDeliveryById = async (req, res) => {
     try {
@@ -398,7 +407,11 @@ export const getDeliveryById = async (req, res) => {
             .populate("courier_id", "name phone profile_picture");
 
         if (!delivery) return res.status(404).json({ success: false, message: "Order not found" });
-        if (delivery.customer_id.toString() !== req.user.id.toString())
+
+        const isCustomer = delivery.customer_id.toString() === req.user.id.toString();
+        const isCourier = delivery.courier_id && delivery.courier_id._id.toString() === req.user.id.toString();
+
+        if (!isCustomer && !isCourier)
             return res.status(403).json({ success: false, message: "Unauthorized" });
 
         const order = delivery.toObject();
@@ -432,6 +445,27 @@ export const getMyDeliveries = async (req, res) => {
         const deliveries = await Delivery.find({ customer_id: req.user.id })
             .sort({ createdAt: -1 }); // newest first
         // console.log(deliveries);
+
+        res.status(200).json({
+            success: true,
+            count: deliveries.length,
+            deliveries,
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to fetch deliveries" });
+    }
+};
+
+/**
+ * @desc Get all deliveries handled by the logged-in courier
+ * @route GET /api/deliveries/my-deliveries
+ * @access Private (Courier)
+ */
+export const getMyCourierDeliveries = async (req, res) => {
+    try {
+        const deliveries = await Delivery.find({ courier_id: req.user.id })
+            .sort({ createdAt: -1 }); // newest first
 
         res.status(200).json({
             success: true,

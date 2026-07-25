@@ -68,16 +68,7 @@ export const goOnline = async (req, res) => {
     try {
         const courierId = req.user.id;
 
-        const courier = await Courier.findOneAndUpdate(
-            { user_id: courierId },
-            {
-                is_online: true,
-                is_available: true, // also check if the courier is handling a delivery
-                location_updated_at: new Date(),
-                online_since: new Date()
-            },
-            { new: true }
-        );
+        const courier = await Courier.findOne({ user_id: courierId });
 
         if (!courier) {
             return res.status(404).json({
@@ -85,6 +76,21 @@ export const goOnline = async (req, res) => {
                 message: "Courier profile not found"
             });
         }
+
+        if (!courier.is_verified) {
+            return res.status(403).json({
+                success: false,
+                message: "Your account must be verified before you can go online"
+            });
+        }
+
+        courier.is_online = true;
+        // Not available if they went offline mid-delivery and are now
+        // coming back online while still committed to that order.
+        courier.is_available = !courier.current_order_id;
+        courier.location_updated_at = new Date();
+        courier.online_since = new Date();
+        await courier.save();
 
         return res.json({
             success: true,
@@ -204,7 +210,18 @@ export const updateCourierProfile = async (req, res) => {
         if (payoutMethod !== undefined) updates.payoutMethod = payoutMethod;
         if (bankName !== undefined) updates.bankName = bankName;
         if (accountNumber !== undefined) updates.accountNumber = accountNumber;
-        if (address !== undefined) updates.address = address;
+
+        if (address !== undefined) {
+            updates.address = address;
+
+            // A verified courier changing their stated address invalidates
+            // what was actually reviewed - require re-verification rather
+            // than silently keeping the old "Verified" status.
+            const existingCourier = await Courier.findOne({ user_id: req.user.id }).select("address is_verified");
+            if (existingCourier?.is_verified && address !== existingCourier.address) {
+                updates.is_verified = false;
+            }
+        }
 
         const validIdFile = req.files?.validId?.[0];
         const proofFile = req.files?.proofOfAddress?.[0];

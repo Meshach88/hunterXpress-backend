@@ -11,6 +11,7 @@ export const getNearbyCouriers = async (latitude, longitude, excludeIds = []) =>
         _id: { $nin: excludeIds },
         is_online: true,
         is_available: true,
+        is_verified: true,
         location_updated_at: { $gte: freshnessLimit },
         location: {
             $near: {
